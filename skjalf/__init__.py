@@ -1,0 +1,1 @@
+"""Skjalf — modular file explorer."""

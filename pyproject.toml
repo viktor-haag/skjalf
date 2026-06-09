@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["skjalf"]
+
+[project]
+authors = [{name = "Viktor Haag"}]
+maintainers = [{name = "Viktor Haag"}]
+name = "skjalf"
+version = "1.0.0"
+description = "Image file browser with semantic search"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.5",
+    "watchdog>=3.0",
+    "sqlalchemy>=2.0",
+    "pillow>=10.0",
+    "loguru>=0.7.3",
+    "chromadb>=1.5.9",
+    "torch>=2.12.0",
+    "transformers>=5.10.2",
+    "accelerate==1.13.0",
+]
+license-files = ["LICENSE"]
+
+[project.scripts]
+skjalf = "skjalf.__main__:main"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+build_command = "pip install build && python -m build"
+upload_to_pypi = false
+logging_level = "DEBUG"
+tag_format = "v{version}"
+commit_author = "semantic-release <semantic-release>"
+commit_parser = "conventional"
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    '''chore(?:\([^)]*\))?: .+''',
+    '''ci(?:\([^)]*\))?: .+''',
+    '''refactor(?:\([^)]*\))?: .+''',
+    '''style(?:\([^)]*\))?: .+''',
+    '''test(?:\([^)]*\))?: .+''',
+    '''build\((?!deps\): .+)''',
+    '''Initial \[Cc\]ommit.+''',
+    '''^wip.+''',
+]
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.publish]
+upload_to_vcs_release = true
+
+[tool.semantic_release.commit_parser_options]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+other_allowed_tags = ["build", "chore", "ci", "docs", "style", "refactor", "test"]
+allowed_tags = ["feat", "fix", "perf", "build", "chore", "ci", "docs", "style", "refactor", "test"]
+default_bump_level = 0
+parse_squash_commits = true
+ignore_merge_commits = true
+
+[tool.semantic_release.remote]
+name = "origin"
+type = "github"
+ignore_token_for_push = false
+insecure = false
