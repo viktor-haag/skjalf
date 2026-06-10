@@ -212,7 +212,7 @@ class Core:
             total = len(images)
             logger.info(f"[embedder] embedding {total} images in {root}")
             self._publish(ProgressEvent(operation="embed", folder=str(root), current=0, total=total))
-            step = max(1, total // EMBED_PROGRESS_FRACTION)
+            step = max(1, int(total * EMBED_PROGRESS_FRACTION))
             for i, img in enumerate(images, start=1):
                 self.embedder.embed_file(img)
                 if i % step == 0 or i == total:
