@@ -73,8 +73,8 @@ CHROMA_METRIC = "cosine"
 # Progress reporting
 # ------------------------------------------------------------------
 
-EMBED_PROGRESS_UPDATE_EVERY = 50  # Log and emit progress every N images
-EMBED_PROGRESS_FRACTION = 0.05  # Emit progress at 5% increments
+EMBED_PROGRESS_UPDATE_EVERY = 10  # Log and emit progress every N images
+EMBED_PROGRESS_FRACTION = 0.01  # Emit progress at 1% increments
 
 # ------------------------------------------------------------------
 # Error handling
