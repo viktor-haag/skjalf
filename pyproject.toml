@@ -9,7 +9,7 @@ packages = ["skjalf"]
 authors = [{name = "Viktor Haag"}]
 maintainers = [{name = "Viktor Haag"}]
 name = "skjalf"
-version = "1.0.0"
+version = "1.0.1"
 description = "Image file browser with semantic search"
 requires-python = ">=3.12"
 dependencies = [
