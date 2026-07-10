@@ -75,3 +75,25 @@ class ProgressEvent:
     current: int
     total: int
     folder: str | None = None
+
+
+@dataclass
+class FolderPendingUpdated:
+    """Emitted when the number of unembedded files in a folder changes."""
+
+    folder: str
+    pending_count: int  # Number of files that need embedding
+
+
+@dataclass
+class EmbeddingStarted:
+    """Emitted when the user manually starts embedding for a folder."""
+
+    folder: str
+
+
+@dataclass
+class EmbeddingCancelled:
+    """Emitted when the user pauses/cancels an in-progress embedding."""
+
+    folder: str

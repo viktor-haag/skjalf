@@ -8,9 +8,12 @@ from loguru import logger
 from .embedder import Embedder
 from .events import (
     DirectoryUpdatedEvent,
+    EmbeddingCancelled,
+    EmbeddingStarted,
     ErrorEvent,
     FSWatcherEvent,
     FileEntry,
+    FolderPendingUpdated,
     ProgressEvent,
     SearchResultEvent,
     ThumbnailReadyEvent,
@@ -44,17 +47,31 @@ class Core:
         self._current_path: Path | None = None
         self._registered: list[Path] = []
         self._search_cancel = False
+        # Manual embedding state tracking
+        self._folder_pending_count: dict[Path, int] = {}   # folder → unembedded file count
+        self._embed_cancel: dict[Path, bool] = {}           # folder → cancel flag
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Load registered folders and start background embedding."""
+        """Load registered folders and initialize per-folder databases."""
         self._registered = [Path(p).resolve() for p in self.folder_store.list_folders()]
         for root in self._registered:
             self.embedder.init_folder(root)
-            self._background_embed_folder(root)
+        # Clean up dangling ChromaDB entries before scanning
+        for root in self._registered:
+            removed = self.embedder.remove_all_dangling(root)
+            if removed > 0:
+                logger.info(f"[core] removed {removed} dangling entry(ies) from {root}")
+        # Scan each folder to determine pending count (no automatic embedding)
+        for root in self._registered:
+            self._update_pending_count(root)
+        # Start watching all registered folders
+        paths = [str(r) for r in self._registered]
+        if paths:
+            self.fs.start(paths, self._on_fs_event)
 
     def stop(self) -> None:
         """Gracefully shut down background workers and the FS monitor."""
@@ -67,10 +84,12 @@ class Core:
     # ------------------------------------------------------------------
 
     def navigate_to(self, path: str) -> None:
-        """Change the watched directory and emit the new contents."""
+        """Change the current directory and emit the new contents.
+
+        Note: The FS monitor continues watching *all registered folders*,
+        so this only changes the UI's active directory context.
+        """
         self._current_path = Path(path).resolve()
-        self.fs.stop()
-        self.fs.start(str(self._current_path), self._on_fs_event)
         entries = self._scan_directory(self._current_path)
         self._publish(DirectoryUpdatedEvent(
             path=str(self._current_path), added=entries, removed=[], modified=[],
@@ -118,6 +137,9 @@ class Core:
                 entries = []
                 for result in results:
                     full = Path(result["abs_path"])
+                    if not full.exists():
+                        logger.warning(f"[search] skipping deleted file: {full}")
+                        continue
                     entries.append(FileEntry(
                         path=str(full),
                         name=full.name,
@@ -146,7 +168,7 @@ class Core:
         self.folder_store.add_folder(str(root))
         self._registered.append(root)
         self.embedder.init_folder(root)
-        self._background_embed_folder(root)
+        self._update_pending_count(root)
 
     def deregister_folder(self, path: str) -> None:
         root = Path(path).resolve()
@@ -201,6 +223,25 @@ class Core:
         return images
 
     # ------------------------------------------------------------------
+    # Pending count detection
+    # ------------------------------------------------------------------
+
+    def _update_pending_count(self, root: Path) -> None:
+        """Reconcile disk files vs ChromaDB and update the pending count.
+
+        Files on disk that are NOT in ChromaDB are considered "pending"
+        (need embedding).
+        """
+        images = self._find_images_recursive(root)
+        if not images:
+            pending = 0
+        else:
+            pending = sum(1 for img in images if self.embedder.get_stored_mtime(img) is None)
+
+        self._folder_pending_count[root] = pending
+        self._publish(FolderPendingUpdated(folder=str(root), pending_count=pending))
+
+    # ------------------------------------------------------------------
     # Background embedding
     # ------------------------------------------------------------------
 
@@ -212,13 +253,23 @@ class Core:
             total = len(images)
             logger.info(f"[embedder] embedding {total} images in {root}")
             self._publish(ProgressEvent(operation="embed", folder=str(root), current=0, total=total))
+
             step = max(1, int(total * EMBED_PROGRESS_FRACTION))
             for i, img in enumerate(images, start=1):
+                # Check cancel flag between files
+                if self._embed_cancel.get(root, False):
+                    logger.info(f"[embedder] cancelled after {i-1}/{total} images in {root}")
+                    return
+
                 self.embedder.embed_file(img)
                 if i % step == 0 or i == total:
                     self._publish(ProgressEvent(operation="embed", folder=str(root), current=i, total=total))
                 if i % EMBED_PROGRESS_UPDATE_EVERY == 0:
                     logger.info(f"[embedder] {i}/{total} done in {root}")
+
+            # Embedding completed — clear cancel flag and update pending count
+            self._embed_cancel[root] = False
+            self._folder_pending_count[root] = 0
             logger.info(f"[embedder] finished embedding {total} images in {root}")
 
         self.worker.run_io(_run)
@@ -268,11 +319,8 @@ class Core:
     # ------------------------------------------------------------------
 
     def _on_fs_event(self, event_type: str, src: str, dst) -> None:
-        """Handle raw filesystem events: embed new/modified files, publish watcher event."""
+        """Handle raw filesystem events: publish watcher event and update pending counts."""
         self._publish(FSWatcherEvent(event_type=event_type, src_path=src, dst_path=dst))
-
-        if self._current_path is None:
-            return
 
         src_path = Path(src)
         if CHROMA_DB_DIR_NAME in src_path.parts:
@@ -280,29 +328,50 @@ class Core:
         if not is_image_file(src_path):
             return
 
-        stat = src_path.stat() if src_path.exists() else None
-        file_entry = FileEntry(
-            path=src,
-            name=src_path.name,
-            is_dir=src_path.is_dir(),
-            size=stat.st_size if stat and not src_path.is_dir() else None,
-            modified=stat.st_mtime if stat else None,
-        )
+        # Update pending count for the folder containing this file (even if no nav path yet)
+        root = self._find_root_for_path(src_path)
+        if root is not None and event_type == "deleted":
+            # Remove stale ChromaDB entry and recalculate pending count
+            self.embedder.remove_file(src_path)
+            self._update_pending_count(root)
+        elif root is not None and event_type in ("created", "modified"):
+            self._update_pending_count(root)
 
-        if event_type == "created":
-            self._background_embed([file_entry])
-        elif event_type == "deleted":
-            self.embedder.remove_file(src_path)
-        elif event_type == "modified":
-            self._background_embed([file_entry])
-        elif event_type == "moved":
-            self.embedder.remove_file(src_path)
-            if dst and is_image_file(Path(dst)):
-                self._background_embed([file_entry])
+    # ------------------------------------------------------------------
+    # Manual embedding trigger & cancel
+    # ------------------------------------------------------------------
+
+    def start_embed_folder(self, path: str) -> None:
+        """Start manual embedding for the specified folder."""
+        root = Path(path).resolve()
+        # Mark as in-progress and clear any previous cancel flag
+        self._embed_cancel[root] = False
+        self._folder_pending_count[root] = 0  # Reset pending while embedding
+        self._publish(EmbeddingStarted(folder=str(root)))
+        self._background_embed_folder(root)
+
+    def cancel_embed_folder(self, path: str) -> None:
+        """Pause (cancel) the current embedding for the specified folder."""
+        root = Path(path).resolve()
+        self._embed_cancel[root] = True
+        # Recalculate pending count — files processed so far are embedded, rest need it
+        self._update_pending_count(root)
+        self._publish(EmbeddingCancelled(folder=str(root)))
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _find_root_for_path(self, path: Path) -> Path | None:
+        """Find the registered root folder that contains *path*, or None."""
+        resolved = path.resolve()
+        for root in self._registered:
+            try:
+                resolved.relative_to(root)
+                return root
+            except ValueError:
+                continue
+        return None
 
     def _publish(self, event) -> None:
         try:

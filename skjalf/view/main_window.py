@@ -134,6 +134,9 @@ class MainWindow(QMainWindow):
         self.event_bus.thumbnail_ready.connect(self._on_thumbnail_ready)
         self.event_bus.error.connect(self._on_error)
         self.event_bus.progress.connect(self._on_progress)
+        self.event_bus.folder_pending_updated.connect(self._on_folder_pending_updated)
+        self.event_bus.embedding_started.connect(self._on_embedding_started)
+        self.event_bus.embedding_cancelled.connect(self._on_embedding_cancelled)
 
         self.event_thread.start()
 
@@ -239,6 +242,18 @@ class MainWindow(QMainWindow):
     def _on_progress(self, event):
         if event.folder:
             self.sidebar.update_progress(event.folder, event.current, event.total)
+
+    def _on_folder_pending_updated(self, event):
+        """Update sidebar when folder pending count changes."""
+        self.sidebar.update_pending_status(event.folder, event.pending_count)
+
+    def _on_embedding_started(self, event):
+        """Handle embedding start notification."""
+        self.sidebar.set_embedding_state(event.folder, "in_progress")
+
+    def _on_embedding_cancelled(self, event):
+        """Handle embedding pause/cancel notification."""
+        self.sidebar.set_embedding_state(event.folder, "idle")
 
     # ------------------------------------------------------------------
     # Misc
