@@ -9,7 +9,10 @@ from PySide6.QtCore import QObject, Signal
 from skjalf.config import FS_POLL_INTERVAL_SEC
 from skjalf.watcher.events import (
     DirectoryUpdatedEvent,
+    EmbeddingCancelled,
+    EmbeddingStarted,
     ErrorEvent,
+    FolderPendingUpdated,
     FSWatcherEvent,
     ProgressEvent,
     SearchResultEvent,
@@ -19,11 +22,14 @@ from skjalf.watcher.events import (
 # Mapping from event class → signal attribute name
 _DISPATCH_MAP = {
     DirectoryUpdatedEvent: "directory_updated",
-    SearchResultEvent: "search_result",
-    FSWatcherEvent: "fs_watcher",
-    ThumbnailReadyEvent: "thumbnail_ready",
+    EmbeddingCancelled: "embedding_cancelled",
+    EmbeddingStarted: "embedding_started",
     ErrorEvent: "error",
+    FolderPendingUpdated: "folder_pending_updated",
+    FSWatcherEvent: "fs_watcher",
     ProgressEvent: "progress",
+    SearchResultEvent: "search_result",
+    ThumbnailReadyEvent: "thumbnail_ready",
 }
 
 
@@ -36,6 +42,9 @@ class EventBus(QObject):
     thumbnail_ready = Signal(object)
     error = Signal(object)
     progress = Signal(object)
+    folder_pending_updated = Signal(object)
+    embedding_started = Signal(object)
+    embedding_cancelled = Signal(object)
 
     def __init__(self, queue):
         super().__init__()

@@ -47,19 +47,24 @@ class _FSHandler(FileSystemEventHandler):
 class FSMonitor:
     """Wraps a watchdog Observer and translates events.
 
-    Use ``start(path, callback)`` to watch a directory.  Events are delivered
-    as ``(event_type, src_path, dst_path)`` tuples via *callback*.
+    Supports watching multiple directories simultaneously.  Events from all
+    watched paths are delivered as ``(event_type, src_path, dst_path)`` tuples
+    via *callback*.
     """
 
     def __init__(self) -> None:
         self._observer: Observer | None = None
         self._running = False
 
-    def start(self, path: str, on_event: Callable) -> None:
-        """Start watching *path* (non-recursive) and call *on_event* for each change."""
+    def start(self, paths: list[str], on_event: Callable) -> None:
+        """Start watching all *paths* (non-recursive) and call *on_event* for each change."""
         self.stop()
+        if not paths:
+            return
         self._observer = Observer()
-        self._observer.schedule(_FSHandler(on_event), path, recursive=False)
+        handler = _FSHandler(on_event)
+        for path in paths:
+            self._observer.schedule(handler, path, recursive=False)
         self._observer.start()
         self._running = True
 

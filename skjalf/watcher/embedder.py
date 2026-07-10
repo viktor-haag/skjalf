@@ -81,6 +81,30 @@ class FolderEmbedDB:
             for doc_id, meta in zip(res["ids"][0], res["metadatas"][0])
         ]
 
+    def get_all_entries(self) -> list[dict]:
+        """Return all stored entries for this folder."""
+        res = self._collection.get(include=["metadatas"])
+        results = []
+        for i, doc_id in enumerate(res["ids"]):
+            meta = res["metadatas"][i] if res["metadatas"] else {}
+            results.append({
+                "id": doc_id,
+                "abs_path": meta.get("abs_path", str(self.root_path / doc_id)),
+            })
+        return results
+
+    def remove_all_dangling(self) -> int:
+        """Remove entries whose abs_path no longer exists on disk. Returns count removed."""
+        entries = self.get_all_entries()
+        removed = 0
+        for entry in entries:
+            abs_path = Path(entry["abs_path"])
+            if not abs_path.exists():
+                logger.info(f"[embedder] removing dangling entry: {entry['id']}")
+                self.delete(abs_path)
+                removed += 1
+        return removed
+
 
 # ------------------------------------------------------------------
 # Embedder (model + per-folder DB management)
@@ -136,6 +160,16 @@ class Embedder:
         with self._lock:
             self._dbs.pop(root_path.resolve(), None)
 
+    def get_stored_mtime(self, file_path: Path) -> float | None:
+        """Return the stored mtime for *file_path*, or None if not in any DB."""
+        root = self._find_root(file_path)
+        if root is None:
+            return None
+        try:
+            return self._dbs[root].get_stored_mtime(file_path)
+        except Exception:
+            return None
+
     def _find_root(self, path: Path) -> Path | None:
         """Find the registered root folder that contains *path*, or None."""
         resolved = path.resolve()
@@ -189,3 +223,10 @@ class Embedder:
         if root in self._dbs:
             return self._dbs[root].query(embedding.tolist(), n_results)
         return []
+
+    def remove_all_dangling(self, root_path: Path) -> int:
+        """Remove dangling entries for *root_path* and return count."""
+        root = root_path.resolve()
+        if root in self._dbs:
+            return self._dbs[root].remove_all_dangling()
+        return 0

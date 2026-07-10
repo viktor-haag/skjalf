@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QProgressBar,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -27,17 +28,31 @@ from ..config import SIDEBAR_ICON_SIZE
 class _FolderRow(QWidget):
     """A single sidebar row: folder icon + name on top, progress bar below."""
 
+    play_clicked = Signal(str)   # Folder path when play is clicked
+    pause_clicked = Signal(str)  # Folder path when pause is clicked
+
     def __init__(self, name: str, icon: QIcon, path: str, parent=None):
         super().__init__(parent)
         self._path = path
+        self._embed_state = "idle"  # "idle", "in_progress", "complete"
         self.setAcceptDrops(False)  # Let the parent QListWidget handle drops
 
         layout = QVBoxLayout(self, spacing=2)
         layout.setContentsMargins(4, 2, 4, 2)
 
-        # Icon + label row
+        # Icon + label row WITH play/pause button
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
+
+        # Play/Pause button (to the left of folder icon)
+        self._play_button = QPushButton()
+        self._play_button.setFixedSize(24, 24)
+        self._play_button.setFlat(True)
+        self._play_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._set_play_icon("idle")
+        top.addWidget(self._play_button)
+
+        # Folder icon + label
         icon_lbl = QLabel()
         icon_lbl.setPixmap(icon.pixmap(*SIDEBAR_ICON_SIZE))
         top.addWidget(icon_lbl)
@@ -55,6 +70,59 @@ class _FolderRow(QWidget):
         self.progress.setFixedHeight(14)
         self.progress.setFormat("%p%")
         layout.addWidget(self.progress)
+
+        # Connect play button click
+        self._play_button.clicked.connect(self._on_play_clicked)
+
+    def _set_play_icon(self, state: str) -> None:
+        """Set the play button appearance based on embed state."""
+        if state == "idle":
+            # Red play icon — clickable to start embedding
+            self._play_button.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: none;
+                    color: red;
+                }
+                QPushButton:hover {
+                    color: darkred;
+                }
+            """)
+            self._play_button.setText("▶")
+            self._play_button.setEnabled(True)
+        elif state == "in_progress":
+            # Red pause icon — clickable to cancel
+            self._play_button.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: none;
+                    color: red;
+                }
+            """)
+            self._play_button.setText("⏸")
+            self._play_button.setEnabled(True)
+        elif state == "complete":
+            # Green indicator lamp — not clickable
+            self._play_button.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: none;
+                    color: green;
+                }
+            """)
+            self._play_button.setText("●")
+            self._play_button.setEnabled(False)
+
+    def set_embed_state(self, state: str) -> None:
+        """Update the play button and progress bar for the given embed state."""
+        self._embed_state = state
+        self._set_play_icon(state)
+
+    def _on_play_clicked(self):
+        if self._embed_state == "idle":
+            self.play_clicked.emit(self._path)
+        elif self._embed_state == "in_progress":
+            self.pause_clicked.emit(self._path)
 
     def set_progress(self, current: int, total: int) -> None:
         if total > 0:
@@ -98,12 +166,21 @@ class SidebarWidget(QListWidget):
         self._folder_rows: dict[str, _FolderRow] = {}
         self._folder_items: dict[str, QListWidgetItem] = {}
 
+        # Connect play/pause signals from folder rows
+        self._on_play_clicked = self._handle_play_clicked
+        self._on_pause_clicked = self._handle_pause_clicked
+
         self.refresh()
 
     # -- Public API ----------------------------------------------------------
 
     def refresh(self) -> None:
         """Rebuild the sidebar from registered folders."""
+        # Save embed states before destroying widgets, so they survive rebuilds.
+        saved_states: dict[str, str] = {}
+        for row in self._folder_rows.values():
+            saved_states[row._path] = row._embed_state
+
         self.clear()
         self._folder_rows.clear()
         self._folder_items.clear()
@@ -117,10 +194,18 @@ class SidebarWidget(QListWidget):
             self.addItem(item)
             self.setItemWidget(item, row)
 
+            # Restore previously saved embed state.
+            if path in saved_states:
+                row.set_embed_state(saved_states[path])
+
             # Index by both raw and resolved path for flexible lookups
             for key in (path, str(Path(path).resolve())):
                 self._folder_rows[key] = row
                 self._folder_items[key] = item
+
+            # Connect play/pause signals
+            row.play_clicked.connect(self._handle_play_clicked)
+            row.pause_clicked.connect(self._handle_pause_clicked)
 
     def update_progress(self, folder: str, current: int, total: int) -> None:
         """Update the progress bar for *folder*."""
@@ -130,15 +215,49 @@ class SidebarWidget(QListWidget):
 
         if 0 < current < total:
             row.set_progress(current, total)
+            # Ensure button is in "in_progress" state while actively embedding
+            if row._embed_state != "in_progress":
+                row.set_embed_state("in_progress")
             if item and row.progress.isVisible():
                 item.setSizeHint(row.sizeHint())
         elif current >= total > 0:
             row.set_progress(current, total)
             row.hide_progress()
+            # Embedding complete — transition to green lamp
+            row.set_embed_state("complete")
             if item:
                 item.setSizeHint(row.sizeHint())
         else:
             row.set_progress(current, total)
+
+    def update_pending_status(self, folder: str, pending_count: int) -> None:
+        """Update the play button state based on pending file count."""
+        row, item = self._lookup(folder)
+        if row is None:
+            return
+
+        if pending_count > 0:
+            # Has unembedded files — show red play button
+            row.set_embed_state("idle")
+        else:
+            # All files embedded — show green lamp
+            row.set_embed_state("complete")
+            row.hide_progress()
+
+    def set_embedding_state(self, folder: str, state: str) -> None:
+        """Set the embedding state (called when embedding starts or is cancelled)."""
+        row, item = self._lookup(folder)
+        if row is None:
+            return
+
+        if state == "in_progress":
+            row.set_embed_state("in_progress")
+            # Progress bar will be shown via update_progress() events
+        elif state == "idle":
+            # Embedding was cancelled — recalculate pending and show play button
+            # This is handled by the FolderPendingUpdated event, but ensure consistency
+            # We don't change the icon here; let the pending count update drive it
+            pass
 
     # -- Internal helpers ----------------------------------------------------
 
@@ -188,6 +307,14 @@ class SidebarWidget(QListWidget):
         self.core.deregister_folder(path)
         self.refresh()
         self.folder_deregistered.emit(path)
+
+    def _handle_play_clicked(self, path: str) -> None:
+        """Handle play button click — start embedding."""
+        self.core.start_embed_folder(path)
+
+    def _handle_pause_clicked(self, path: str) -> None:
+        """Handle pause button click — cancel current embedding."""
+        self.core.cancel_embed_folder(path)
 
     # -- Drag & drop (external folders) --------------------------------------
 
