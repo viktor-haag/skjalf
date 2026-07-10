@@ -176,6 +176,11 @@ class SidebarWidget(QListWidget):
 
     def refresh(self) -> None:
         """Rebuild the sidebar from registered folders."""
+        # Save embed states before destroying widgets, so they survive rebuilds.
+        saved_states: dict[str, str] = {}
+        for row in self._folder_rows.values():
+            saved_states[row._path] = row._embed_state
+
         self.clear()
         self._folder_rows.clear()
         self._folder_items.clear()
@@ -188,6 +193,10 @@ class SidebarWidget(QListWidget):
             item.setSizeHint(row.sizeHint())
             self.addItem(item)
             self.setItemWidget(item, row)
+
+            # Restore previously saved embed state.
+            if path in saved_states:
+                row.set_embed_state(saved_states[path])
 
             # Index by both raw and resolved path for flexible lookups
             for key in (path, str(Path(path).resolve())):
