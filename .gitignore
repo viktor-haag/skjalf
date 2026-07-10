@@ -55,3 +55,8 @@ tmp/
 .pytest_cache/
 .coverage
 htmlcov/
+test_images
+*.db
+closest.png
+farest.png
+search_results.png
