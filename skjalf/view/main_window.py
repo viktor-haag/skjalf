@@ -1,5 +1,8 @@
 """Main window: sidebar, main view, search bar, and event bus wiring."""
 
+import importlib.metadata
+
+from loguru import logger
 from PySide6.QtCore import QThread, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
@@ -8,19 +11,26 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QSpinBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
-from loguru import logger
 
 from skjalf.watcher.embedder import Embedder
+
+from ..config import (
+    DEBOUNCE_SEARCH_MS,
+    SEARCH_RESULTS_DEFAULT,
+    SEARCH_RESULTS_MAX,
+    SEARCH_RESULTS_MIN,
+    SIDEBAR_WIDTH,
+)
 from .event_bus import EventBus
 from .help_window import HelpWindow
 from .main_view import MainViewWidget
 from .sidebar import SidebarWidget
-from ..config import DEBOUNCE_SEARCH_MS, SEARCH_RESULTS_MIN, SEARCH_RESULTS_MAX, SEARCH_RESULTS_DEFAULT, SIDEBAR_WIDTH
+from .version_check import VersionCheckResult, check_for_updates
 
 
 class MainWindow(QMainWindow):
@@ -33,7 +43,20 @@ class MainWindow(QMainWindow):
 
     def __init__(self, core):
         super().__init__(parent=None)
-        self.setWindowTitle("Skjalf")
+        try:
+            app_version = importlib.metadata.version("skjalf")
+        except importlib.metadata.PackageNotFoundError:
+            app_version = "dev"
+        self.setWindowTitle(f"Skjalf {app_version}")
+        self._current_version = app_version
+        self._latest_version = ""
+        self._update_available = False
+
+        # Start background version check
+        self._version_worker = check_for_updates(
+            app_version, self._on_version_check_complete
+        )
+
         self.core = core
         self.event_queue = core.event_queue
         self._search_active = False
@@ -60,12 +83,14 @@ class MainWindow(QMainWindow):
         clear_btn = QPushButton("X")
         clear_btn.clicked.connect(self._clear_search)
 
-        help_btn = QPushButton("?")
-        help_btn.clicked.connect(self._open_help)
+        self._help_btn = QPushButton("?")
+        self._help_btn.setFixedWidth(30)
+        self._help_btn.setFixedHeight(26)
+        self._help_btn.clicked.connect(self._open_help)
 
         layout.addWidget(self.search_bar)
         layout.addWidget(clear_btn)
-        layout.addWidget(help_btn)
+        layout.addWidget(self._help_btn)
 
         # Results limit
         results_label = QLabel("Results:")
@@ -75,7 +100,9 @@ class MainWindow(QMainWindow):
         self._results_limit = QSpinBox()
         self._results_limit.setRange(SEARCH_RESULTS_MIN, SEARCH_RESULTS_MAX)
         self._results_limit.setValue(SEARCH_RESULTS_DEFAULT)
-        self._results_limit.setToolTip(f"Number of search results to show ({SEARCH_RESULTS_MIN}–{SEARCH_RESULTS_MAX})")
+        self._results_limit.setToolTip(
+            f"Number of search results to show ({SEARCH_RESULTS_MIN}–{SEARCH_RESULTS_MAX})"
+        )
         self._results_limit.valueChanged.connect(self._on_results_limit_changed)
         layout.addWidget(self._results_limit)
 
@@ -87,7 +114,8 @@ class MainWindow(QMainWindow):
         self._gpu_toggle.setEnabled(has_gpu)
         self._gpu_toggle.setChecked(has_gpu and Embedder.device() == "cuda")
         self._gpu_toggle.setToolTip(
-            "Toggle GPU acceleration for embeddings" if has_gpu
+            "Toggle GPU acceleration for embeddings"
+            if has_gpu
             else "No CUDA-capable GPU detected"
         )
         layout.addWidget(self._gpu_toggle)
@@ -259,8 +287,22 @@ class MainWindow(QMainWindow):
     # Misc
     # ------------------------------------------------------------------
 
+    def _on_version_check_complete(self, result: VersionCheckResult):
+        """Handle version check result (called from background thread via Qt signal)."""
+        if result.available and result.latest_version != "?":
+            self._update_available = True
+            self._latest_version = result.latest_version
+            # Color the help button yellow
+            self._help_btn.setStyleSheet(
+                "QPushButton { background-color: #FFEB3B; border: 1px solid #c7b429; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #FDD835; }"
+            )
+
     def _open_help(self):
-        HelpWindow(self).exec()
+        update_info = None
+        if self._update_available:
+            update_info = (self._current_version, self._latest_version)
+        HelpWindow(self, update_info=update_info).exec()
 
     # ------------------------------------------------------------------
     # Lifecycle
