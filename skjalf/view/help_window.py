@@ -34,7 +34,7 @@ class HelpWindow(QDialog):
         # Add update info if available
         if update_info is not None:
             current_version, latest_version = update_info
-            lines.append(f"⚠ Update available!")
+            lines.append("⚠ Update available!")
             lines.append(f"Current version: {current_version}")
             lines.append(f"Latest version: {latest_version}")
             lines.append(

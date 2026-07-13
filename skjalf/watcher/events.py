@@ -5,7 +5,7 @@ orchestrator and consumed by the UI-side EventBus, which re-emits them as
 Qt signals.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

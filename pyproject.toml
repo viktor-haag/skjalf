@@ -25,8 +25,43 @@ dependencies = [
 ]
 license-files = ["LICENSE"]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-qt>=4.3",
+    "pytest-mock>=3.14",
+    "pytest-cov>=5.0",
+    "ruff>=0.15.21",
+]
+
 [project.scripts]
 skjalf = "skjalf.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gui: tests that require a display (PySide6 widgets)",
+    "slow: tests that take significant time (embedding, integration)",
+    "integration: end-to-end tests requiring real filesystem/DB",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:The `expire_on_commit` argument is deprecated:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["skjalf"]
+omit = [
+    "tests/*",
+    "skjalf/__main__.py",
+    "skjalf/view/__main__.py",
+    "skjalf/view/help_window.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 0
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
