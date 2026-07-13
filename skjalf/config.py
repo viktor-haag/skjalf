@@ -48,7 +48,7 @@ PROCESS_WORKERS = 2
 
 # All image formats that the application can recognize
 IMAGE_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg",
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp",
     ".webp", ".tiff", ".tif", ".ico", ".heic", ".heif",
 }
 
