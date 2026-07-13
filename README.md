@@ -1,12 +1,10 @@
-# NOTE:
-
-This project is still at its prototype stage. While it is fully functioning, it may still have some major bugs or suboptimal performance which should be resolved once milestone 1 is reached. In addition, keep in mind that there is currently no way to stop the ingestion process for a newly registered folder other than deregistering it via the context menu.
-
 # Skjalf
 
 **Skjalf** is an image file browser with semantic search capabilities. Skjalf uses AI to understand the content of your images, allowing you to find exactly what you're looking for using natural language queries.
 
 Why is it called **Skjalf**? The name is inspired by Odin’s high seat, Hlidskjalf, from which he could observe the entire world. In much the same way, Skjalf watches over your file system, helping you quickly find the images you’re looking for.
+
+This project is still in an early stage, so bugs are to be expected. If you run into any issues, please open a ticket. It would be greatly appreciated!
 
 https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 
@@ -42,7 +40,9 @@ Clone the repository and install the package:
 ```bash
 git clone https://github.com/viktor-haag/skjalf.git
 cd skjalf
-pip install .
+conda create -n skjalf python=3.12 # feel free to use your favorite python environment manager
+conda activate skjalf
+pip install -e .
 ```
 
 ### 2. Download the ALIGN Model
@@ -80,7 +80,7 @@ skjalf
 - [x] Progress tracking for embeddings and file operations
 
 ### Milestone 1: Consolidation & Distribution
-- [ ] More control over the ingestion process of registered folders
+- [X] More control over the ingestion process of registered folders
 - [ ] Drag & drop support (folders & files)
 - [ ] Light/Dark mode toggle
 - [ ] Codebase refactoring and UI design update
