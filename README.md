@@ -8,7 +8,7 @@ This project is still at its prototype stage. While it is fully functioning, it 
 
 Why is it called **Skjalf**? The name is inspired by Odin’s high seat, Hlidskjalf, from which he could observe the entire world. In much the same way, Skjalf watches over your file system, helping you quickly find the images you’re looking for.
 
-https://github.com/user-attachments/assets/08f667e5-c58a-4266-b62e-71243a3ee49e
+https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 
 ## Features
 
