@@ -38,5 +38,7 @@ jobs:
           pip install -e ".[test]"
 
       - name: Run tests with coverage
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           xvfb-run make test-coverage
