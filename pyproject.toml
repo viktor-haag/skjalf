@@ -2,8 +2,8 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["skjalf"]
+[tool.setuptools.packages.find]
+include = ["skjalf*"]
 
 [project]
 authors = [{name = "Viktor Haag"}]
@@ -11,7 +11,20 @@ maintainers = [{name = "Viktor Haag"}]
 name = "skjalf"
 version = "1.0.1"
 description = "Image file browser with semantic search"
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["image-browser", "semantic-search", "ai", "file-explorer"]
 requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics :: Viewers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "PySide6>=6.5",
     "watchdog>=3.0",
@@ -24,6 +37,7 @@ dependencies = [
     "accelerate==1.13.0",
 ]
 license-files = ["LICENSE"]
+urls = {Homepage = "https://github.com/viktor-haag/skjalf", Repository = "https://github.com/viktor-haag/skjalf", "Bug Tracker" = "https://github.com/viktor-haag/skjalf/issues"}
 
 [project.optional-dependencies]
 test = [
@@ -33,6 +47,11 @@ test = [
     "pytest-cov>=5.0",
     "ruff>=0.15.21",
 ]
+build = [
+    "build>=1.0",
+    "twine>=5.0",
+]
+dev = ["skjalf[test,build]"]
 
 [project.scripts]
 skjalf = "skjalf.__main__:main"
@@ -66,7 +85,7 @@ fail_under = 0
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 build_command = "pip install build && python -m build"
-upload_to_pypi = false
+upload_to_pypi = true
 logging_level = "DEBUG"
 tag_format = "v{version}"
 commit_author = "semantic-release <semantic-release>"

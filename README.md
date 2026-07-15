@@ -1,10 +1,14 @@
 # Skjalf
 
-**Skjalf** is an image file browser with semantic search capabilities. Skjalf uses AI to understand the content of your images, allowing you to find exactly what you're looking for using natural language queries.
+Ever tried to find "the photo of my cat sleeping on the couch" but couldn't remember the filename or folder?
 
-Why is it called **Skjalf**? The name is inspired by Odin’s high seat, Hlidskjalf, from which he could observe the entire world. In much the same way, Skjalf watches over your file system, helping you quickly find the images you’re looking for.
+Skjalf lets you search your local photo collection using natural language instead of filenames or tags. It uses AI to understand the content of your images and your search queries, helping you find exactly what you're looking for - while keeping everything on your machine.
+
+Why is it called **Skjalf**? The name is inspired by Hlidskjalf, Odin's high seat in Norse mythology, which allowed him to see and observe the world from above. Similarly, Skjalf helps you gain a new perspective on your own image collection - making it easier to discover what you are looking for.
 
 This project is still in an early stage, so bugs are to be expected. If you run into any issues, please open a ticket. It would be greatly appreciated!
+
+Watch Skjalf in action below!
 
 https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 
@@ -31,11 +35,16 @@ https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 ### Prerequisites
 
 - Python 3.12 or higher
-- Git
 
 ### 1. Install Skjalf
 
-Clone the repository and install the package:
+**From PyPI (recommended):**
+
+```bash
+pip install skjalf
+```
+
+**From Source:**
 
 ```bash
 git clone https://github.com/viktor-haag/skjalf.git
@@ -79,7 +88,7 @@ skjalf
 - [ ] Test cases
 - [ ] Performance improvements
 - [ ] Dedicated multi-platform installer (Windows & Linux, maybe macOS)
-- [ ] PyPI release for easier installation
+- [x] PyPI release for easier installation
 
 ### Milestone 2: People & Search-By-Example
 - [ ] Face detection and recognition

@@ -1,4 +1,4 @@
-.PHONY: test test-coverage test-fast lint
+.PHONY: test test-coverage test-fast lint build check publish-test publish clean-dist
 
 test:
 	python -m pytest tests/ -v --tb=short
@@ -11,3 +11,19 @@ test-fast:
 
 lint:
 	python -m ruff check skjalf/ tests/
+
+build:
+	rm -rf dist/ build/ skjalf.egg-info
+	python3 -m build
+
+check:
+	python3 -m twine check dist/*
+
+publish-test:
+	python3 -m twine upload --repository testpypi dist/*
+
+publish:
+	python3 -m twine upload dist/*
+
+clean-dist:
+	rm -rf dist/ build/ skjalf.egg-info
