@@ -84,27 +84,11 @@ fail_under = 0
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-build_command = "pip install build && python -m build"
-upload_to_pypi = true
 logging_level = "DEBUG"
 tag_format = "v{version}"
 commit_author = "semantic-release <semantic-release>"
 commit_parser = "conventional"
 
-[tool.semantic_release.changelog]
-exclude_commit_patterns = [
-    '''chore(?:\([^)]*\))?: .+''',
-    '''ci(?:\([^)]*\))?: .+''',
-    '''refactor(?:\([^)]*\))?: .+''',
-    '''style(?:\([^)]*\))?: .+''',
-    '''test(?:\([^)]*\))?: .+''',
-    '''build\((?!deps\): .+)''',
-    '''Initial \[Cc\]ommit.+''',
-    '''^wip.+''',
-]
-
-[tool.semantic_release.changelog.default_templates]
-changelog_file = "CHANGELOG.md"
 
 [tool.semantic_release.publish]
 upload_to_vcs_release = true
