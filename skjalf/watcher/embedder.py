@@ -10,11 +10,19 @@ from pathlib import Path
 import chromadb
 import numpy as np
 import torch
-from PIL import Image
+from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import LocalEntryNotFoundError
 from loguru import logger
+from PIL import Image
 from transformers import AlignModel, AlignProcessor, AutoTokenizer
 
-from ..config import CHROMA_DB_DIR_NAME, CHROMA_COLLECTION_NAME, CHROMA_METRIC, EMBEDDING_DEVICE, EMBEDDING_MODEL_NAME
+from ..config import (
+    CHROMA_COLLECTION_NAME,
+    CHROMA_DB_DIR_NAME,
+    CHROMA_METRIC,
+    EMBEDDING_DEVICE,
+    EMBEDDING_MODEL_NAME,
+)
 from ..utils import relative_to_root
 
 
@@ -26,6 +34,7 @@ def _gpu_available() -> bool:
 # ------------------------------------------------------------------
 # Per-folder ChromaDB wrapper
 # ------------------------------------------------------------------
+
 
 class FolderEmbedDB:
     """Wraps a ChromaDB collection stored inside *root_path*/.skjalf/.
@@ -87,10 +96,12 @@ class FolderEmbedDB:
         results = []
         for i, doc_id in enumerate(res["ids"]):
             meta = res["metadatas"][i] if res["metadatas"] else {}
-            results.append({
-                "id": doc_id,
-                "abs_path": meta.get("abs_path", str(self.root_path / doc_id)),
-            })
+            results.append(
+                {
+                    "id": doc_id,
+                    "abs_path": meta.get("abs_path", str(self.root_path / doc_id)),
+                }
+            )
         return results
 
     def remove_all_dangling(self) -> int:
@@ -110,22 +121,82 @@ class FolderEmbedDB:
 # Embedder (model + per-folder DB management)
 # ------------------------------------------------------------------
 
+
 class Embedder:
     """Manages per-folder ChromaDB instances with ALIGN model inference.
 
-    The ALIGN model and processor are loaded once as class attributes.
-    Individual ``Embedder`` instances manage the per-folder databases.
+    The ALIGN model and processor are loaded lazily on first access.
     """
 
-    processor = AlignProcessor.from_pretrained(EMBEDDING_MODEL_NAME)
-    tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL_NAME)
-    model = AlignModel.from_pretrained(EMBEDDING_MODEL_NAME, device_map=EMBEDDING_DEVICE)
-
+    _processor: "AlignProcessor | None" = None
+    _tokenizer: "AutoTokenizer | None" = None
+    _model: "AlignModel | None" = None
     _device: str = EMBEDDING_DEVICE
+    _load_lock = threading.Lock()
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._dbs: dict[Path, FolderEmbedDB] = {}
+
+    # -- lazy loading --------------------------------------------------------
+
+    @classmethod
+    def _ensure_loaded(cls) -> None:
+        """Load model, processor, and tokenizer if not already loaded."""
+        if cls._model is not None:
+            return
+        with cls._load_lock:
+            if cls._model is not None:
+                return  # double-check after acquiring lock
+            cls._processor = AlignProcessor.from_pretrained(EMBEDDING_MODEL_NAME)
+            cls._tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL_NAME)
+            cls._model = AlignModel.from_pretrained(
+                EMBEDDING_MODEL_NAME, device_map=cls._device
+            )
+
+    @classmethod
+    def is_model_loaded(cls) -> bool:
+        """Return True if model is loaded in memory."""
+        return cls._model is not None
+
+    @classmethod
+    def warm_up(cls) -> None:
+        """Run a dummy embedding to initialize GPU/CPU kernels.
+
+        Call after ``_ensure_loaded`` so the first real embedding is fast.
+        """
+        cls._ensure_loaded()
+        dummy = Image.new("RGB", (32, 32), color=(128, 128, 128))
+        inputs = cls._processor(images=dummy, return_tensors="pt").to(cls._device)
+        cls._model.get_image_features(**inputs)
+
+    @classmethod
+    def model_available(cls) -> bool:
+        """Check if model files are cached locally without downloading."""
+        try:
+            hf_hub_download(
+                repo_id=EMBEDDING_MODEL_NAME,
+                filename="config.json",
+                local_files_only=True,
+            )
+            return True
+        except LocalEntryNotFoundError:
+            return False
+
+    @property
+    def processor(self) -> "AlignProcessor":
+        self._ensure_loaded()
+        return self._processor  # type: ignore[return-value]
+
+    @property
+    def tokenizer(self) -> "AutoTokenizer":
+        self._ensure_loaded()
+        return self._tokenizer  # type: ignore[return-value]
+
+    @property
+    def model(self) -> "AlignModel":
+        self._ensure_loaded()
+        return self._model  # type: ignore[return-value]
 
     # -- device management ---------------------------------------------------
 
@@ -139,7 +210,8 @@ class Embedder:
         if cls._device == device:
             return
         cls._device = device
-        cls.model.to(device)
+        if cls._model is not None:
+            cls._model.to(device)
         logger.info(f"[embedder] device switched to {device}")
 
     @classmethod
@@ -195,12 +267,20 @@ class Embedder:
         try:
             db = self._dbs[root]
             current_mtime = round(file_path.stat().st_mtime, 3)
-            if db.get_stored_mtime(file_path) is not None and current_mtime <= db.get_stored_mtime(file_path):
+            if db.get_stored_mtime(
+                file_path
+            ) is not None and current_mtime <= db.get_stored_mtime(file_path):
                 return
 
             image = Image.open(file_path).convert("RGB")
-            inputs = self.processor(images=image, return_tensors="pt").to(self._device)
-            vec = self.model.get_image_features(**inputs).pooler_output.detach().squeeze().cpu().numpy()
+            inputs = self.processor(images=image, return_tensors="pt").to(self.device())
+            vec = (
+                self.model.get_image_features(**inputs)
+                .pooler_output.detach()
+                .squeeze()
+                .cpu()
+                .numpy()
+            )
             db.upsert(file_path, vec)
         except Exception:
             logger.exception(f"[embedder] Failed to embed {file_path}")
@@ -217,8 +297,14 @@ class Embedder:
 
     def query(self, root_path: Path, query: str, n_results: int = 10) -> list[dict]:
         """Return the top-*n_results* matches for *query* in *root_path*'s DB."""
-        text_input = self.tokenizer(query, return_tensors="pt").to(self._device)
-        embedding = self.model.get_text_features(**text_input).pooler_output.detach().squeeze().cpu().numpy()
+        text_input = self.tokenizer(query, return_tensors="pt").to(self.device())
+        embedding = (
+            self.model.get_text_features(**text_input)
+            .pooler_output.detach()
+            .squeeze()
+            .cpu()
+            .numpy()
+        )
         root = root_path.resolve()
         if root in self._dbs:
             return self._dbs[root].query(embedding.tolist(), n_results)
