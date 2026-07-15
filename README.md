@@ -45,24 +45,15 @@ conda activate skjalf
 pip install -e .
 ```
 
-### 2. Download the ALIGN Model
+### 2. Run the App
 
-Skjalf uses the `kakaobrain/align-base` model for image understanding. You need to download it locally using the Hugging Face CLI:
-
-```bash
-pip install huggingface_hub
-hf download kakaobrain/align-base
-```
-
-### 3. Run the App
-
-Once installed, you can launch Skjalf from your terminal:
+Once installed, you can launch Skjalf from your terminal. If you use skjalf for the first time, it will download the `kakaobrain/align-base` from Huggning Face at startup.
 
 ```bash
 skjalf
 ```
 
-### 4. Use the App
+### 3. Use the App
 
 * Add root folders by dragging and dropping them into the left sidebar or via the context menu. The application will automatically index the selected folders and prepare everything needed for semantic search.
 * Select a root folder to explore its contents. Images can be opened in your default image viewer with a double-click.
@@ -81,6 +72,7 @@ skjalf
 
 ### Milestone 1: Consolidation & Distribution
 - [X] More control over the ingestion process of registered folders
+- [X] Automatic model download at first launch
 - [ ] Drag & drop support (folders & files)
 - [ ] Light/Dark mode toggle
 - [ ] Codebase refactoring and UI design update
