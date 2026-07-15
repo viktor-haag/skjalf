@@ -148,10 +148,14 @@ class Embedder:
         with cls._load_lock:
             if cls._model is not None:
                 return  # double-check after acquiring lock
-            cls._processor = AlignProcessor.from_pretrained(EMBEDDING_MODEL_NAME)
-            cls._tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL_NAME)
+            cls._processor = AlignProcessor.from_pretrained(
+                EMBEDDING_MODEL_NAME, local_files_only=True
+            )
+            cls._tokenizer = AutoTokenizer.from_pretrained(
+                EMBEDDING_MODEL_NAME, local_files_only=True
+            )
             cls._model = AlignModel.from_pretrained(
-                EMBEDDING_MODEL_NAME, device_map=cls._device
+                EMBEDDING_MODEL_NAME, device_map=cls._device, local_files_only=True
             )
 
     @classmethod
