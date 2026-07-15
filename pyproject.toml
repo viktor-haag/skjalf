@@ -9,7 +9,7 @@ include = ["skjalf*"]
 authors = [{name = "Viktor Haag"}]
 maintainers = [{name = "Viktor Haag"}]
 name = "skjalf"
-version = "1.0.1"
+version = "1.1.0"
 description = "Image file browser with semantic search"
 readme = "README.md"
 license = "Apache-2.0"
