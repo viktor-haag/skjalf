@@ -34,6 +34,40 @@ BATCH_SIZE = 32  # Batch size for efficient processing
 
 
 # ------------------------------------------------------------------
+# Names.yaml loading
+# ------------------------------------------------------------------
+
+def load_names(names_path: Path) -> dict[str, str]:
+    """Load names.yaml and return {abs_path: name} mapping.
+
+    Args:
+        names_path: Path to names.yaml file
+
+    Returns:
+        Dictionary mapping absolute file paths to person names.
+        Paths are resolved relative to the project root.
+    """
+    import yaml
+    if not names_path.exists():
+        logger.warning(f"names.yaml not found: {names_path}")
+        return {}
+    try:
+        with open(names_path) as f:
+            data = yaml.safe_load(f) or {}
+        # Convert to {abs_path: name} for easy lookup
+        # Resolve relative paths against the project root (parent of names.yaml)
+        project_root = names_path.parent.parent  # names.yaml is in project root
+        result: dict[str, str] = {}
+        for name, path_str in data.items():
+            resolved = (project_root / path_str).resolve()
+            result[str(resolved)] = name
+        return result
+    except Exception as exc:
+        logger.warning(f"Failed to load names.yaml: {exc}")
+        return {}
+
+
+# ------------------------------------------------------------------
 # Model loading
 # ------------------------------------------------------------------
 
@@ -75,12 +109,21 @@ class PersonDB:
         )
         logger.info(f"ChromaDB ready at {db_path}, collection: {collection_name}")
 
-    def upsert(self, path: str, embedding: np.ndarray) -> None:
-        """Store an embedding for the given file path."""
+    def upsert(self, path: str, embedding: np.ndarray, name: str = "") -> None:
+        """Store an embedding for the given file path.
+
+        Args:
+            path: Absolute file path (used as document ID)
+            embedding: Numpy embedding vector
+            name: Optional person name for metadata
+        """
+        metadata: dict[str, str] = {"abs_path": path}
+        if name:
+            metadata["name"] = name
         self._collection.upsert(
             ids=[path],
             embeddings=[embedding.tolist()],
-            metadatas=[{"abs_path": path}],
+            metadatas=[metadata],
         )
 
     def query(self, embedding: list[float], n_results: int = 10) -> list[dict]:
@@ -291,15 +334,36 @@ def embed_file(file_path: Path, model: torch.nn.Module, device: str) -> Optional
 # Embed command logic
 # ------------------------------------------------------------------
 
-def embed_folder(folder_path: Path, db: PersonDB, model: torch.nn.Module, device: str) -> None:
+def embed_folder(
+    folder_path: Path,
+    db: PersonDB,
+    model: torch.nn.Module,
+    device: str,
+    names_path: Optional[Path] = None,
+) -> None:
     """Embed all images in a folder into ChromaDB.
 
     Skips files already in the database (incremental update).
     Uses batch processing for efficiency.
+    If names_path is provided, includes person names from names.yaml
+    as metadata for matching images.
+
+    Args:
+        folder_path: Path to folder containing images
+        db: PersonDB instance
+        model: ViT model
+        device: "cpu" or "cuda"
+        names_path: Optional path to names.yaml for person names
     """
     if not folder_path.is_dir():
         logger.error(f"Not a directory: {folder_path}")
         sys.exit(1)
+
+    # Load names mapping if provided
+    name_map: dict[str, str] = {}
+    if names_path:
+        name_map = load_names(names_path)
+        logger.info(f"Loaded {len(name_map)} name(s) from {names_path}")
 
     images = sorted([
         p for p in folder_path.rglob("*")
@@ -339,7 +403,8 @@ def embed_folder(folder_path: Path, db: PersonDB, model: torch.nn.Module, device
 
                 for k, (path, embedding) in enumerate(zip(to_embed, batch_embeddings)):
                     abs_path = str(path.resolve())
-                    db.upsert(abs_path, embedding)
+                    person_name = name_map.get(abs_path, "")
+                    db.upsert(abs_path, embedding, name=person_name)
                     embedded += 1
             except Exception as e:
                 failed += len(to_embed)
@@ -556,6 +621,7 @@ def main():
     embed_parser.add_argument("folder", type=Path, help="Path to folder containing images")
     embed_parser.add_argument("--db", type=str, default="persons.db", help="Path to ChromaDB file (default: persons.db)")
     embed_parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="Device to use (default: cpu)")
+    embed_parser.add_argument("--names", type=Path, default=None, help="Path to names.yaml for including person names")
 
     # Search command
     search_parser = subparsers.add_parser("search", help="Search for similar images")
@@ -588,7 +654,7 @@ def main():
         model = load_model(args.device)
 
         # Embed folder
-        embed_folder(args.folder, db, model, args.device)
+        embed_folder(args.folder, db, model, args.device, names_path=args.names)
 
     elif args.command == "search":
         if not args.image.exists():

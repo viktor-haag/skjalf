@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .file_op_dialog import FileOperationDialog
-from .models import DirectoryModel, SearchModel
+from .models import DirectoryModel, SearchModel, PERSON_NAME_ROLE
 from ..config import DEBOUNCE_SCROLL_MS, GRID_SIZE, ICON_SIZE
 from ..utils import safe_delete
 
@@ -73,6 +73,55 @@ class AlignedDelegate(QStyledItemDelegate):
             x = image_rect.center().x() - scaled.width() // 2
             y = image_rect.bottom() - scaled.height()
             painter.drawPixmap(x, y, scaled)
+
+            # Draw face icon in top-right corner if person_name is set
+            person_name = index.data(PERSON_NAME_ROLE)
+            if person_name:
+                self._draw_face_icon(painter, scaled, image_rect)
+
+    def _draw_face_icon(self, painter: QPainter, pixmap: QPixmap, image_rect: QRect):
+        """Draw a small face icon in the top-right corner of the image."""
+        icon_size = min(20, pixmap.width() // 5, pixmap.height() // 5)
+        if icon_size < 10:
+            return
+
+        # Create a simple face icon using QPainter
+        face = QPixmap(icon_size, icon_size)
+        face.fill(Qt.GlobalColor.transparent)
+
+        p = QPainter(face)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Face circle
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(255, 255, 255, 200))  # Semi-transparent white
+        p.drawEllipse(0, 0, icon_size, icon_size)
+
+        # Eyes
+        p.setBrush(QColor(80, 80, 80))
+        eye_radius = max(1, icon_size // 8)
+        eye_y = icon_size // 3
+        p.drawEllipse(icon_size // 3 - eye_radius, eye_y - eye_radius, eye_radius * 2, eye_radius * 2)
+        p.drawEllipse(icon_size * 2 // 3 - eye_radius, eye_y - eye_radius, eye_radius * 2, eye_radius * 2)
+
+        # Smile
+        p.setPen(QColor(80, 80, 80))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        smile_radius = icon_size // 3
+        smile_y = icon_size // 2
+        p.drawArc(icon_size // 3, smile_y, smile_radius * 2, smile_radius, 0, 180 * 16)
+
+        p.end()
+
+        # Position in top-right corner with small margin
+        margin = 2
+        target_rect = QRect(
+            image_rect.right() - icon_size - margin,
+            image_rect.top() + margin,
+            icon_size,
+            icon_size,
+        )
+        painter.drawPixmap(target_rect, face)
 
         # Draw text
         if option.state & QStyle.StateFlag.State_Selected:

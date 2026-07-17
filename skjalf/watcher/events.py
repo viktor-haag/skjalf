@@ -18,6 +18,7 @@ class FileEntry:
     size: int | None = None
     modified: float | None = None
     thumbnail_data: bytes | None = None
+    person_name: str = ""
 
 
 @dataclass

@@ -6,6 +6,9 @@ from PySide6.QtGui import QIcon, QPixmap
 from skjalf.utils import is_image_file
 from skjalf.watcher.events import FileEntry
 
+# Custom role for person name metadata
+PERSON_NAME_ROLE = Qt.ItemDataRole.UserRole + 1
+
 
 def _filtered(entries: list[FileEntry]) -> list[FileEntry]:
     """Keep only directories and image files."""
@@ -62,6 +65,9 @@ class FileListModel(QAbstractListModel):
                 if pix.loadFromData(item.thumbnail_data):
                     return pix
             return QIcon.fromTheme("document")
+
+        if role == PERSON_NAME_ROLE:
+            return getattr(item, "person_name", "")
 
         return None
 

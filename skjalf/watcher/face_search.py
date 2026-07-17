@@ -52,12 +52,21 @@ class PersonDB:
         )
         logger.info(f"ChromaDB ready at {db_path}, collection: {collection_name}")
 
-    def upsert(self, path: str, embedding: np.ndarray) -> None:
-        """Store an embedding for the given file path."""
+    def upsert(self, path: str, embedding: np.ndarray, name: str = "") -> None:
+        """Store an embedding for the given file path.
+
+        Args:
+            path: Absolute file path (used as document ID)
+            embedding: Numpy embedding vector
+            name: Optional person name for metadata
+        """
+        metadata: dict[str, str] = {"abs_path": path}
+        if name:
+            metadata["name"] = name
         self._collection.upsert(
             ids=[path],
             embeddings=[embedding.tolist()],
-            metadatas=[{"abs_path": path}],
+            metadatas=[metadata],
         )
 
     def query(self, embedding: list[float], n_results: int = 10) -> list[dict]:
@@ -79,6 +88,7 @@ class PersonDB:
                 "id": doc_id,
                 "abs_path": meta.get("abs_path", doc_id),
                 "distance": distance,
+                "name": meta.get("name", ""),
             })
         return results
 
@@ -331,12 +341,14 @@ class FaceSearcher:
                 continue
             try:
                 stat = full.stat()
+                person_name = result.get("name", "")
                 entries.append(FileEntry(
                     path=str(full),
                     name=full.name,
                     is_dir=False,
                     size=stat.st_size,
                     modified=stat.st_mtime,
+                    person_name=person_name,
                 ))
             except OSError as exc:
                 logger.warning(f"[face_search] Failed to stat {full}: {exc}")
