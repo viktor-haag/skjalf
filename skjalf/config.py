@@ -121,3 +121,13 @@ DEBOUNCE_SEARCH_MS = 300  # Search bar debounce interval
 SEARCH_RESULTS_MIN = 1
 SEARCH_RESULTS_MAX = 1000
 SEARCH_RESULTS_DEFAULT = 10
+
+# ------------------------------------------------------------------
+# Face search
+# ------------------------------------------------------------------
+
+PERSONS_DB_PATH = str(Path.home() / ".cache" / "skjalf" / "persons.db")
+PERSONS_COLLECTION_NAME = "persons"
+FACE_EMBEDDING_MODEL_NAME = "hf_hub:gaunernst/vit_tiny_patch8_112.arcface_ms1mv3"
+FACE_INPUT_SIZE = 112
+FACE_EMBEDDING_DIM = 512

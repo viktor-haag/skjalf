@@ -18,6 +18,7 @@ from .events import (
     SearchResultEvent,
     ThumbnailReadyEvent,
 )
+from .face_search import FaceSearcher
 from .fs_monitor import FSMonitor
 from .models import FolderStore
 from .thumbnails import ThumbnailService
@@ -47,6 +48,10 @@ class Core:
         self._current_path: Path | None = None
         self._registered: list[Path] = []
         self._search_cancel = False
+        # Face search
+        self.face_searcher = FaceSearcher(
+            names_path=Path(__file__).parent.parent / "names.yaml",
+        )
         # Manual embedding state tracking
         self._folder_pending_count: dict[Path, int] = {}   # folder → unembedded file count
         self._embed_cancel: dict[Path, bool] = {}           # folder → cancel flag
@@ -158,6 +163,28 @@ class Core:
         """Cancel any in-progress search and emit an empty final result."""
         self._search_cancel = True
         self._publish(SearchResultEvent(query="", results=[], is_final=True))
+
+    # ------------------------------------------------------------------
+    # Face search
+    # ------------------------------------------------------------------
+
+    def face_search(self, query: str, n_results: int = 10) -> None:
+        """Run a face search in the persons database.
+
+        Matches the query against names.yaml, then queries the face ChromaDB.
+        Publishes SearchResultEvent (same event as semantic search).
+        """
+        self._publish(SearchResultEvent(query=query, results=[], is_final=False))
+
+        def _run():
+            try:
+                entries = self.face_searcher.search(query, n_results)
+                self._publish(SearchResultEvent(query, entries, is_final=True))
+            except Exception as exc:
+                logger.warning(f"[face_search] Exception: {exc}")
+                self._publish(ErrorEvent(message=str(exc), context="face_search"))
+
+        self.worker.run_io(_run)
 
     # ------------------------------------------------------------------
     # Folder registration
