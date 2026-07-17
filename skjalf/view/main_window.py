@@ -292,10 +292,10 @@ class MainWindow(QMainWindow):
         if result.available and result.latest_version != "?":
             self._update_available = True
             self._latest_version = result.latest_version
-            # Color the help button yellow
+            # Color the help button amber to indicate an update is available
             self._help_btn.setStyleSheet(
-                "QPushButton { background-color: #FFEB3B; border: 1px solid #c7b429; border-radius: 4px; }"
-                "QPushButton:hover { background-color: #FDD835; }"
+                "QPushButton { background-color: #FFC107; border: 1px solid #FFA000; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #FFB300; }"
             )
 
     def _open_help(self):
