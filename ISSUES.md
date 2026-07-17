@@ -1,0 +1,3 @@
+- load person model also on startup
+- person search still broken. names.yml read, but still not working.
+- introduce a feature to insert names from names.yml instead of autoloading this.
