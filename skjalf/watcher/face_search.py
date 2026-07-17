@@ -1,11 +1,13 @@
 """Face search module for Skjalf.
 
 This module provides face recognition search capabilities using the
-ArcFace ViT model via timm. It wraps a ChromaDB "persons" collection
-and provides fuzzy name matching against a names.yaml file.
+ArcFace ViT model via timm. It queries face embeddings stored in
+per-folder ChromaDB instances (``.skjalf/`` subdirectories) and provides
+fuzzy name matching against a names.yaml file.
 
 Usage:
-    searcher = FaceSearcher(names_path, persons_db_path)
+    searcher = FaceSearcher(names_path)
+    searcher.set_folder_db_dirs([Path("/data/photos/.skjalf"), ...])
     results = searcher.search("jacqueline", n_results=10)
 """
 
@@ -25,129 +27,15 @@ from .events import FileEntry
 from ..config import (
     FACE_EMBEDDING_MODEL_NAME,
     FACE_INPUT_SIZE,
-    FACE_EMBEDDING_DIM,
-    PERSONS_DB_PATH,
-    PERSONS_COLLECTION_NAME,
+    FACE_COLLECTION_NAME,
 )
-
-
-# ------------------------------------------------------------------
-# ChromaDB wrapper for face embeddings
-# ------------------------------------------------------------------
-
-class PersonDB:
-    """Wraps a ChromaDB collection for face embeddings.
-
-    Documents are keyed by absolute file path; metadata includes the
-    absolute path for result lookups.
-    """
-
-    def __init__(self, db_path: str, collection_name: str = "persons", metric: str = "cosine"):
-        self.db_path = db_path
-        self.collection_name = collection_name
-        self._client = chromadb.PersistentClient(path=db_path)
-        self._collection = self._client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": metric},
-        )
-        logger.info(f"ChromaDB ready at {db_path}, collection: {collection_name}")
-
-    def upsert(self, path: str, embedding: np.ndarray, name: str = "") -> None:
-        """Store an embedding for the given file path.
-
-        Args:
-            path: Absolute file path (used as document ID)
-            embedding: Numpy embedding vector
-            name: Optional person name for metadata
-        """
-        metadata: dict[str, str] = {"abs_path": path}
-        if name:
-            metadata["name"] = name
-        self._collection.upsert(
-            ids=[path],
-            embeddings=[embedding.tolist()],
-            metadatas=[metadata],
-        )
-
-    def query(self, embedding: list[float], n_results: int = 10) -> list[dict]:
-        """Query the collection for similar images.
-
-        Returns:
-            List of dicts with 'id', 'abs_path', and 'distance'
-        """
-        res = self._collection.query(
-            query_embeddings=[embedding],
-            n_results=n_results,
-            include=["metadatas", "distances"],
-        )
-        results = []
-        for i, doc_id in enumerate(res["ids"][0]):
-            meta = res["metadatas"][0][i] if res["metadatas"] else {}
-            distance = res["distances"][0][i] if res["distances"] else None
-            results.append({
-                "id": doc_id,
-                "abs_path": meta.get("abs_path", doc_id),
-                "distance": distance,
-                "name": meta.get("name", ""),
-            })
-        return results
-
-    def query_inverted(self, embedding: list[float], n_results: int = 10) -> list[dict]:
-        """Query the collection for the least similar images (farthest away).
-
-        ChromaDB only supports nearest-neighbor search, so we fetch all
-        embeddings and compute distances manually.
-
-        Args:
-            embedding: Query embedding vector
-            n_results: Number of farthest results to return
-
-        Returns:
-            List of dicts with 'id', 'abs_path', and 'distance' (descending order)
-        """
-        all_data = self._collection.get(
-            include=["embeddings", "metadatas"],
-        )
-
-        if not all_data["ids"]:
-            return []
-
-        results = []
-        query_vec = np.array(embedding)
-
-        for i, doc_id in enumerate(all_data["ids"]):
-            emb = np.array(all_data["embeddings"][i])
-            cos_sim = np.dot(query_vec, emb) / (np.linalg.norm(query_vec) * np.linalg.norm(emb))
-            distance = 1.0 - cos_sim
-            meta = all_data["metadatas"][i] if all_data["metadatas"] else {}
-            results.append({
-                "id": doc_id,
-                "abs_path": meta.get("abs_path", doc_id),
-                "distance": float(distance),
-            })
-
-        results.sort(key=lambda x: x["distance"], reverse=True)
-        return results[:n_results]
-
-    def exists(self, path: str) -> bool:
-        """Check if a file path already exists in the collection."""
-        try:
-            res = self._collection.get(ids=[path], include=[])
-            return len(res["ids"]) > 0
-        except Exception:
-            return False
-
-    def get_all_paths(self) -> list[str]:
-        """Return all stored file paths."""
-        res = self._collection.get(include=[])
-        return res["ids"]
 
 
 # ------------------------------------------------------------------
 # Model loading
 # ------------------------------------------------------------------
 
-def load_model(device: str = "cpu") -> torch.nn.Module:
+def load_face_model(device: str = "cpu") -> torch.nn.Module:
     """Load the ArcFace ViT model via timm.
 
     Args:
@@ -156,11 +44,11 @@ def load_model(device: str = "cpu") -> torch.nn.Module:
     Returns:
         Loaded and evaluated model
     """
-    logger.info(f"Loading model {FACE_EMBEDDING_MODEL_NAME} on {device}...")
+    logger.info(f"[face_search] Loading model {FACE_EMBEDDING_MODEL_NAME} on {device}...")
     model = timm.create_model(FACE_EMBEDDING_MODEL_NAME, pretrained=True)
     model = model.to(device)
     model.eval()
-    logger.info("Model loaded successfully.")
+    logger.info("[face_search] ArcFace model loaded successfully.")
     return model
 
 
@@ -168,7 +56,7 @@ def load_model(device: str = "cpu") -> torch.nn.Module:
 # Image preprocessing and embedding
 # ------------------------------------------------------------------
 
-def preprocess_image(image: Image.Image) -> torch.Tensor:
+def preprocess_face_image(image: Image.Image, input_size: int = FACE_INPUT_SIZE) -> torch.Tensor:
     """Preprocess a PIL image for the ArcFace model.
 
     Args:
@@ -178,13 +66,13 @@ def preprocess_image(image: Image.Image) -> torch.Tensor:
         Preprocessed tensor of shape (3, FACE_INPUT_SIZE, FACE_INPUT_SIZE)
     """
     image = image.convert("RGB")
-    image = image.resize((FACE_INPUT_SIZE, FACE_INPUT_SIZE), Image.Resampling.BILINEAR)
+    image = image.resize((input_size, input_size), Image.Resampling.BILINEAR)
     tensor = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
     return tensor
 
 
-def embed_image(image: Image.Image, model: torch.nn.Module, device: str) -> np.ndarray:
-    """Generate an embedding for a single image.
+def embed_face_image(image: Image.Image, model: torch.nn.Module, device: str = "cpu") -> np.ndarray:
+    """Generate a face embedding for a single image.
 
     Args:
         image: PIL Image (must be RGB)
@@ -194,7 +82,7 @@ def embed_image(image: Image.Image, model: torch.nn.Module, device: str) -> np.n
     Returns:
         Numpy array of the normalized embedding vector (512-dim)
     """
-    tensor = preprocess_image(image).unsqueeze(0).to(device)
+    tensor = preprocess_face_image(image).unsqueeze(0).to(device)
     with torch.no_grad():
         embedding = model(tensor)
         embedding = F.normalize(embedding, dim=1)
@@ -209,16 +97,16 @@ class FaceSearcher:
     """Encapsulates face search: fuzzy name match -> ArcFace embedding -> ChromaDB query.
 
     This class loads names.yaml for fuzzy matching, lazily initializes
-    the ArcFace model and ChromaDB connection, and provides a single
-    search method that ties it all together.
+    the ArcFace model, and queries face embeddings stored in per-folder
+    ChromaDB instances.
     """
 
-    def __init__(self, names_path: Path, persons_db_path: str = PERSONS_DB_PATH) -> None:
+    def __init__(self, names_path: Path) -> None:
         self._names_path = names_path
-        self._persons_db_path = persons_db_path
         self._names: dict[str, str] = {}
         self._model: Optional[torch.nn.Module] = None
-        self._db: Optional[PersonDB] = None
+        self._device: str = "cpu"
+        self._face_db_dirs: list[Path] = []  # List of .skjalf/ directories to search
         self._load_names()
 
     # -- Initialization --------------------------------------------------
@@ -240,14 +128,24 @@ class FaceSearcher:
     def _get_model(self) -> torch.nn.Module:
         """Lazy-load the ArcFace model."""
         if self._model is None:
-            self._model = load_model("cpu")
+            self._model = load_face_model(self._device)
         return self._model
 
-    def _get_db(self) -> PersonDB:
-        """Lazy-load the persons.db ChromaDB instance."""
-        if self._db is None:
-            self._db = PersonDB(db_path=self._persons_db_path)
-        return self._db
+    def set_device(self, device: str) -> None:
+        """Set the device for face embedding model."""
+        if self._device == device:
+            return
+        self._device = device
+        self._model = None  # Force reload on next use
+        logger.info(f"[face_search] device switched to {device}")
+
+    def set_folder_db_dirs(self, db_dirs: list[Path]) -> None:
+        """Set the list of .skjalf/ directories to search for face embeddings.
+
+        Args:
+            db_dirs: List of resolved paths to .skjalf/ directories (one per registered folder)
+        """
+        self._face_db_dirs = db_dirs
 
     # -- Fuzzy matching --------------------------------------------------
 
@@ -281,7 +179,7 @@ class FaceSearcher:
         """
         try:
             image = Image.open(image_path).convert("RGB")
-            return embed_image(image, self._get_model(), "cpu")
+            return embed_face_image(image, self._get_model(), self._device)
         except Exception as exc:
             logger.warning(f"[face_search] Failed to embed {image_path}: {exc}")
             return None
@@ -294,8 +192,9 @@ class FaceSearcher:
         Pipeline:
         1. Fuzzy-match query against names.yaml keys
         2. If match found, embed the referenced image
-        3. Query persons.db ChromaDB for similar faces
-        4. Convert results to FileEntry list
+        3. Query all registered folders' face_embeddings collections
+        4. Merge and sort results by distance
+        5. Convert results to FileEntry list
 
         Args:
             query: User's search text (e.g., "jacqueline")
@@ -328,27 +227,52 @@ class FaceSearcher:
             logger.warning(f"[face_search] Failed to generate embedding for {image_path}")
             return []
 
-        # Step 4: Query ChromaDB for similar faces
-        db = self._get_db()
-        results = db.query(embedding.tolist(), n_results=n_results)
+        # Step 4: Query all registered folders' face_embeddings collections
+        all_results: list[dict] = []
+        for db_dir in self._face_db_dirs:
+            try:
+                client = chromadb.PersistentClient(path=str(db_dir))
+                collection = client.get_collection(
+                    name=FACE_COLLECTION_NAME,
+                    metadata={"hnsw:space": "cosine"},
+                )
+                res = collection.query(
+                    query_embeddings=[embedding.tolist()],
+                    n_results=min(n_results * 3, 50),  # Fetch more to merge across folders
+                    include=["metadatas", "distances"],
+                )
+                for i, doc_id in enumerate(res["ids"][0]):
+                    meta = res["metadatas"][0][i] if res["metadatas"] else {}
+                    distance = res["distances"][0][i] if res["distances"] else None
+                    all_results.append({
+                        "id": doc_id,
+                        "abs_path": meta.get("abs_path", doc_id),
+                        "distance": distance,
+                        "name": meta.get("name", ""),
+                    })
+            except Exception as e:
+                logger.warning(f"[face_search] Error querying face DB at {db_dir}: {e}")
+
+        # Sort by distance and take top n_results
+        all_results.sort(key=lambda x: x["distance"] if x["distance"] is not None else float("inf"))
+        all_results = all_results[:n_results]
 
         # Step 5: Convert to FileEntry list
         entries: list[FileEntry] = []
-        for result in results:
+        for result in all_results:
             full = Path(result["abs_path"])
             if not full.exists():
                 logger.debug(f"[face_search] Skipping deleted file: {full}")
                 continue
             try:
                 stat = full.stat()
-                person_name = result.get("name", "")
                 entries.append(FileEntry(
                     path=str(full),
                     name=full.name,
                     is_dir=False,
                     size=stat.st_size,
                     modified=stat.st_mtime,
-                    person_name=person_name,
+                    person_name=result.get("name", ""),
                 ))
             except OSError as exc:
                 logger.warning(f"[face_search] Failed to stat {full}: {exc}")

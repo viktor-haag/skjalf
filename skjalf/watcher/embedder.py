@@ -1,11 +1,14 @@
-"""ChromaDB-based semantic embedding service for image files.
+"""ChromaDB-based semantic and face embedding service for image files.
 
 Each registered root folder gets a hidden ``.skjalf/`` subdirectory containing
-a ChromaDB persistent client database.
+a ChromaDB persistent client database with two collections:
+- ``image_embeddings`` (semantic, via ALIGN model)
+- ``face_embeddings`` (face recognition, via ArcFace model)
 """
 
 import threading
 from pathlib import Path
+from typing import Optional
 
 import chromadb
 import numpy as np
@@ -22,6 +25,10 @@ from ..config import (
     CHROMA_METRIC,
     EMBEDDING_DEVICE,
     EMBEDDING_MODEL_NAME,
+    FACE_COLLECTION_NAME,
+    FACE_EMBEDDING_MODEL_NAME,
+    FACE_INPUT_SIZE,
+    _NAMES_YAML_PATH,
 )
 from ..utils import relative_to_root
 
@@ -41,35 +48,50 @@ class FolderEmbedDB:
 
     Documents are keyed by relative path; metadata includes the absolute path
     and last-modified timestamp so we can skip unchanged files.
+
+    Supports multiple collections within the same database (e.g., 'image_embeddings'
+    and 'face_embeddings').
     """
 
-    def __init__(self, root_path: Path) -> None:
+    def __init__(self, root_path: Path, collection_name: str = CHROMA_COLLECTION_NAME) -> None:
         self.root_path = root_path.resolve()
+        self.collection_name = collection_name
         self._db_dir = self.root_path / CHROMA_DB_DIR_NAME
         self._db_dir.mkdir(parents=True, exist_ok=True)
 
         self._client = chromadb.PersistentClient(path=str(self._db_dir))
         self._collection = self._client.get_or_create_collection(
-            name=CHROMA_COLLECTION_NAME,
+            name=collection_name,
             metadata={"hnsw:space": CHROMA_METRIC},
         )
-        logger.info(f"[embedder] ChromaDB ready at {self._db_dir}")
+        logger.info(f"[embedder] ChromaDB ready at {self._db_dir}, collection: {collection_name}")
 
-    def upsert(self, path: Path, embedding: np.ndarray) -> None:
+    def upsert(self, path: Path, embedding: np.ndarray, name: str = "") -> None:
+        """Store an embedding for *path* in this collection.
+
+        Args:
+            path: File path (keyed by relative path)
+            embedding: Numpy embedding vector
+            name: Optional person name for face embeddings (stored in metadata)
+        """
         doc_id = relative_to_root(path, self.root_path)
         mtime = round(path.stat().st_mtime, 3)
+        metadata: dict[str, str | float] = {"abs_path": str(path), "mtime": mtime}
+        if name:
+            metadata["name"] = name
         self._collection.upsert(
             ids=[doc_id],
             embeddings=[embedding.tolist()],
-            metadatas=[{"abs_path": str(path), "mtime": mtime}],
+            metadatas=[metadata],
         )
 
     def delete(self, path: Path) -> None:
+        """Delete an entry from this collection."""
         doc_id = relative_to_root(path, self.root_path)
         self._collection.delete(ids=[doc_id])
 
     def get_stored_mtime(self, path: Path) -> float | None:
-        """Return the stored mtime for *path*, or None if not found."""
+        """Return the stored mtime for *path* in this collection, or None if not found."""
         doc_id = relative_to_root(path, self.root_path)
         try:
             res = self._collection.get(ids=[doc_id], include=["metadatas"])
@@ -80,28 +102,41 @@ class FolderEmbedDB:
         return None
 
     def query(self, embedding: list[float], n_results: int = 10) -> list[dict]:
+        """Query this collection for similar embeddings."""
         res = self._collection.query(
             query_embeddings=[embedding],
             n_results=n_results,
             include=["metadatas"],
         )
         return [
-            {"id": doc_id, "abs_path": meta["abs_path"]}
+            {
+                "id": doc_id,
+                "abs_path": meta["abs_path"],
+                "name": meta.get("name", ""),
+            }
             for doc_id, meta in zip(res["ids"][0], res["metadatas"][0])
         ]
 
+    def exists(self, path: Path) -> bool:
+        """Check if a file path already exists in this collection."""
+        doc_id = relative_to_root(path, self.root_path)
+        try:
+            res = self._collection.get(ids=[doc_id], include=[])
+            return len(res["ids"]) > 0
+        except Exception:
+            return False
+
     def get_all_entries(self) -> list[dict]:
-        """Return all stored entries for this folder."""
+        """Return all stored entries for this collection."""
         res = self._collection.get(include=["metadatas"])
         results = []
         for i, doc_id in enumerate(res["ids"]):
             meta = res["metadatas"][i] if res["metadatas"] else {}
-            results.append(
-                {
-                    "id": doc_id,
-                    "abs_path": meta.get("abs_path", str(self.root_path / doc_id)),
-                }
-            )
+            results.append({
+                "id": doc_id,
+                "abs_path": meta.get("abs_path", str(self.root_path / doc_id)),
+                "name": meta.get("name", ""),
+            })
         return results
 
     def remove_all_dangling(self) -> int:
@@ -112,7 +147,7 @@ class FolderEmbedDB:
             abs_path = Path(entry["abs_path"])
             if not abs_path.exists():
                 logger.info(f"[embedder] removing dangling entry: {entry['id']}")
-                self.delete(abs_path)
+                self._collection.delete(ids=[entry["id"]])
                 removed += 1
         return removed
 
@@ -123,9 +158,10 @@ class FolderEmbedDB:
 
 
 class Embedder:
-    """Manages per-folder ChromaDB instances with ALIGN model inference.
+    """Manages per-folder ChromaDB instances with ALIGN and ArcFace model inference.
 
-    The ALIGN model and processor are loaded lazily on first access.
+    The ALIGN model, processor, and tokenizer are loaded lazily on first access.
+    The ArcFace model is also loaded lazily on first face embedding call.
     """
 
     _processor: "AlignProcessor | None" = None
@@ -134,9 +170,17 @@ class Embedder:
     _device: str = EMBEDDING_DEVICE
     _load_lock = threading.Lock()
 
+    # ArcFace model (lazy-loaded)
+    _face_model: Optional[torch.nn.Module] = None
+    _face_model_lock = threading.Lock()
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._dbs: dict[Path, FolderEmbedDB] = {}
+        self._face_db: dict[Path, FolderEmbedDB] = {}
+        self._names: dict[str, str] = {}
+        self._names_path: Path = _NAMES_YAML_PATH
+        self._names_loaded = False
 
     # -- lazy loading --------------------------------------------------------
 
@@ -159,9 +203,35 @@ class Embedder:
             )
 
     @classmethod
+    def _ensure_face_model_loaded(cls) -> None:
+        """Load the ArcFace model if not already loaded."""
+        if cls._face_model is not None:
+            return
+        with cls._face_model_lock:
+            if cls._face_model is not None:
+                return
+            try:
+                import timm
+                import torch.nn.functional as F
+
+                logger.info(f"[embedder] Loading ArcFace model {FACE_EMBEDDING_MODEL_NAME} on {cls._device}...")
+                cls._face_model = timm.create_model(FACE_EMBEDDING_MODEL_NAME, pretrained=True)
+                cls._face_model = cls._face_model.to(cls._device)
+                cls._face_model.eval()
+                logger.info("[embedder] ArcFace model loaded successfully.")
+            except Exception as e:
+                logger.warning(f"[embedder] Failed to load ArcFace model: {e}")
+                cls._face_model = None
+
+    @classmethod
     def is_model_loaded(cls) -> bool:
         """Return True if model is loaded in memory."""
         return cls._model is not None
+
+    @classmethod
+    def face_model_available(cls) -> bool:
+        """Return True if the ArcFace model is loaded."""
+        return cls._face_model is not None
 
     @classmethod
     def warm_up(cls) -> None:
@@ -229,12 +299,16 @@ class Embedder:
         root = root_path.resolve()
         with self._lock:
             if root not in self._dbs:
-                self._dbs[root] = FolderEmbedDB(root)
+                self._dbs[root] = FolderEmbedDB(root, collection_name=CHROMA_COLLECTION_NAME)
+            if root not in self._face_db:
+                self._face_db[root] = FolderEmbedDB(root, collection_name=FACE_COLLECTION_NAME)
+        self._load_names()
 
     def close_folder(self, root_path: Path) -> None:
         """Remove the ChromaDB for *root_path*."""
         with self._lock:
             self._dbs.pop(root_path.resolve(), None)
+            self._face_db.pop(root_path.resolve(), None)
 
     def get_stored_mtime(self, file_path: Path) -> float | None:
         """Return the stored mtime for *file_path*, or None if not in any DB."""
@@ -257,10 +331,67 @@ class Embedder:
                 continue
         return None
 
+    # -- name loading --------------------------------------------------------
+
+    def _load_names(self) -> None:
+        """Load names.yaml into memory."""
+        if self._names_loaded:
+            return
+        import yaml
+
+        if self._names_path.exists():
+            try:
+                with open(self._names_path) as f:
+                    data = yaml.safe_load(f) or {}
+                # Build {abs_path: name} mapping
+                project_root = self._names_path.parent.parent
+                for name, path_str in data.items():
+                    resolved = (project_root / path_str).resolve()
+                    self._names[str(resolved)] = name
+                logger.info(f"[embedder] Loaded {len(self._names)} name(s) from {self._names_path}")
+            except Exception as e:
+                logger.warning(f"[embedder] Failed to load names.yaml: {e}")
+        self._names_loaded = True
+
+    # -- face embedding helpers ----------------------------------------------
+
+    @staticmethod
+    def _preprocess_face_image(image: Image.Image, input_size: int = FACE_INPUT_SIZE) -> torch.Tensor:
+        """Preprocess a PIL image for the ArcFace model."""
+        image = image.convert("RGB")
+        image = image.resize((input_size, input_size), Image.Resampling.BILINEAR)
+        tensor = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
+        return tensor
+
+    @classmethod
+    def embed_face(cls, image: Image.Image) -> Optional[np.ndarray]:
+        """Generate a face embedding for a single image.
+
+        Args:
+            image: PIL Image (must be RGB)
+
+        Returns:
+            Numpy array of the normalized embedding vector (512-dim), or None on failure.
+        """
+        if not cls.face_model_available():
+            return None
+        try:
+            import torch.nn.functional as F
+
+            tensor = cls._preprocess_face_image(image)
+            tensor = tensor.unsqueeze(0).to(cls._device)
+            with torch.no_grad():
+                embedding = cls._face_model(tensor)
+                embedding = F.normalize(embedding, dim=1)
+            return embedding.squeeze(0).cpu().numpy()
+        except Exception as e:
+            logger.warning(f"[embedder] Failed to generate face embedding: {e}")
+            return None
+
     # -- embedding operations ------------------------------------------------
 
     def embed_file(self, file_path: Path) -> None:
-        """Generate and store an embedding for *file_path*.
+        """Generate and store semantic and face embeddings for *file_path*.
 
         Skips the file if its mtime hasn't changed since the last embed.
         """
@@ -271,12 +402,12 @@ class Embedder:
         try:
             db = self._dbs[root]
             current_mtime = round(file_path.stat().st_mtime, 3)
-            if db.get_stored_mtime(
-                file_path
-            ) is not None and current_mtime <= db.get_stored_mtime(file_path):
-                return
+            if db.get_stored_mtime(file_path) is not None and current_mtime <= db.get_stored_mtime(file_path):
+                return  # Skip entirely — both embeddings are up-to-date
 
             image = Image.open(file_path).convert("RGB")
+
+            # Semantic embedding (ALIGN)
             inputs = self.processor(images=image, return_tensors="pt").to(self.device())
             vec = (
                 self.model.get_image_features(**inputs)
@@ -286,16 +417,29 @@ class Embedder:
                 .numpy()
             )
             db.upsert(file_path, vec)
+
+            # Face embedding (ArcFace)
+            face_db = self._face_db[root]
+            self._ensure_face_model_loaded()
+            face_vec = self.embed_face(image)
+            if face_vec is not None:
+                abs_path = str(file_path.resolve())
+                person_name = self._names.get(abs_path, "")
+                face_db.upsert(file_path, face_vec, name=person_name)
+
         except Exception:
             logger.exception(f"[embedder] Failed to embed {file_path}")
 
     def remove_file(self, file_path: Path) -> None:
-        """Remove the embedding for *file_path* from its folder DB."""
+        """Remove both semantic and face embeddings for *file_path*."""
         root = self._find_root(file_path)
         if root is None:
             return
         try:
-            self._dbs[root].delete(file_path)
+            if root in self._dbs:
+                self._dbs[root].delete(file_path)
+            if root in self._face_db:
+                self._face_db[root].delete(file_path)
         except Exception:
             logger.exception(f"[embedder] Failed to delete {file_path}")
 
@@ -314,9 +458,17 @@ class Embedder:
             return self._dbs[root].query(embedding.tolist(), n_results)
         return []
 
-    def remove_all_dangling(self, root_path: Path) -> int:
-        """Remove dangling entries for *root_path* and return count."""
+    def remove_all_dangling(self, root_path: Path) -> tuple[int, int]:
+        """Remove dangling entries for *root_path* from both collections.
+
+        Returns:
+            Tuple of (semantic_removed, face_removed) counts.
+        """
         root = root_path.resolve()
+        semantic_removed = 0
+        face_removed = 0
         if root in self._dbs:
-            return self._dbs[root].remove_all_dangling()
-        return 0
+            semantic_removed = self._dbs[root].remove_all_dangling()
+        if root in self._face_db:
+            face_removed = self._face_db[root].remove_all_dangling()
+        return semantic_removed, face_removed

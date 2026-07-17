@@ -27,6 +27,7 @@ from ..config import (
     CHROMA_DB_DIR_NAME,
     EMBED_PROGRESS_UPDATE_EVERY,
     EMBED_PROGRESS_FRACTION,
+    _NAMES_YAML_PATH,
 )
 from ..utils import is_image_file, is_thumbnailable, should_skip_dir
 
@@ -50,8 +51,9 @@ class Core:
         self._search_cancel = False
         # Face search
         self.face_searcher = FaceSearcher(
-            names_path=Path(__file__).parent.parent / "names.yaml",
+            names_path=_NAMES_YAML_PATH,
         )
+        self._face_db_dirs: list[Path] = []  # .skjalf/ directories for face search
         # Manual embedding state tracking
         self._folder_pending_count: dict[Path, int] = {}   # folder → unembedded file count
         self._embed_cancel: dict[Path, bool] = {}           # folder → cancel flag
@@ -65,11 +67,14 @@ class Core:
         self._registered = [Path(p).resolve() for p in self.folder_store.list_folders()]
         for root in self._registered:
             self.embedder.init_folder(root)
+            self._face_db_dirs.append(root / CHROMA_DB_DIR_NAME)
+        # Update FaceSearcher with folder DB dirs
+        self.face_searcher.set_folder_db_dirs(self._face_db_dirs)
         # Clean up dangling ChromaDB entries before scanning
         for root in self._registered:
             removed = self.embedder.remove_all_dangling(root)
-            if removed > 0:
-                logger.info(f"[core] removed {removed} dangling entry(ies) from {root}")
+            if removed[0] > 0 or removed[1] > 0:
+                logger.info(f"[core] removed {removed[0]} semantic + {removed[1]} face entry(ies) from {root}")
         # Scan each folder to determine pending count (no automatic embedding)
         for root in self._registered:
             self._update_pending_count(root)
@@ -195,13 +200,17 @@ class Core:
         self.folder_store.add_folder(str(root))
         self._registered.append(root)
         self.embedder.init_folder(root)
+        self._face_db_dirs.append(root / CHROMA_DB_DIR_NAME)
+        self.face_searcher.set_folder_db_dirs(self._face_db_dirs)
         self._update_pending_count(root)
 
     def deregister_folder(self, path: str) -> None:
         root = Path(path).resolve()
         self.folder_store.remove_folder(str(root))
         self._registered = [p for p in self._registered if p != root]
+        self._face_db_dirs = [d for d in self._face_db_dirs if str(d) != str(root / CHROMA_DB_DIR_NAME)]
         self.embedder.close_folder(root)
+        self.face_searcher.set_folder_db_dirs(self._face_db_dirs)
 
     def _find_registered_root(self) -> Path | None:
         """Return the registered root that contains the current path, or None."""

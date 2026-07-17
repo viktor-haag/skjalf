@@ -131,3 +131,14 @@ PERSONS_COLLECTION_NAME = "persons"
 FACE_EMBEDDING_MODEL_NAME = "hf_hub:gaunernst/vit_tiny_patch8_112.arcface_ms1mv3"
 FACE_INPUT_SIZE = 112
 FACE_EMBEDDING_DIM = 512
+FACE_COLLECTION_NAME = "face_embeddings"
+
+# ------------------------------------------------------------------
+# Names YAML
+# ------------------------------------------------------------------
+
+# names.yaml is at the project root (one level above the skjalf package)
+import os as _os
+_NAMES_YAML_NAME = "names.yaml"
+# Resolve relative to this config file's parent (skjalf/), then go up one level
+_NAMES_YAML_PATH = Path(__file__).parent.parent / _NAMES_YAML_NAME

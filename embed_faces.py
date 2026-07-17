@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Standalone script for embedding images into ChromaDB for face recognition.
+"""DEPRECATED: Standalone script for embedding images into ChromaDB for face recognition.
+
+This script is deprecated. Face embeddings are now integrated into the regular
+embedding pipeline. Each registered folder's ``.skjalf/`` ChromaDB contains a
+``face_embeddings`` collection that is populated automatically.
+
+This script still works with the global ``persons.db`` for backwards compatibility.
 
 Usage:
     python embed_faces.py embed <folder> [--db persons.db] [--device cpu|cuda]
