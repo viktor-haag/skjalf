@@ -55,3 +55,6 @@ tmp/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Agentic
+AGENTS.md

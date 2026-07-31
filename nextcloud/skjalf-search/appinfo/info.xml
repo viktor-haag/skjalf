@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+    <id>skjalf-search</id>
+    <name>Skjalf Search</name>
+    <summary>AI-powered semantic image search for Nextcloud</summary>
+    <description>
+        # Skjalf Search
+
+        A Nextcloud app that provides AI-powered semantic search for images stored in your Nextcloud instance.
+
+        ## Features
+
+        - **Automatic Ingestion**: Monitor folders for new images and automatically generate embeddings
+        - **Semantic Search**: Search images by natural language queries (e.g., "sunset at the beach")
+        - **Smart Thumbnails**: Generate and cache thumbnails for faster browsing
+        - **Real-time Updates**: Instant embedding when new files are uploaded
+
+        ## Architecture
+
+        The app uses a Python embedder service to generate vector embeddings from image content,
+        storing them in ChromaDB for fast semantic retrieval.
+    </description>
+    <version>0.1.0</version>
+    <licence>agpl</licence>
+    <author mail="pn@skjalf.dev" homepage="https://skjalf.dev">Skjalf Team</author>
+    <category>tools</category>
+    <category>files</category>
+    <bugs>https://github.com/skjalf/skjalf/issues</bugs>
+    <repository type="git">https://github.com/skjalf/skjalf.git</repository>
+    <documentation>
+        <user>https://docs.skjalf.dev</user>
+        <developer>https://github.com/skjalf/skjalf/tree/main/nextcloud</developer>
+    </documentation>
+    <dependencies>
+        <nextcloud min-version="28" max-version="31"/>
+    </dependencies>
+</info>
