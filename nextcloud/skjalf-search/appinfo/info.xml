@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
-    <id>skjalf-search</id>
+    <id>skjalfsearch</id>
     <name>Skjalf Search</name>
     <summary>AI-powered semantic image search for Nextcloud</summary>
     <description>
@@ -37,6 +37,6 @@
     </dependencies>
 
     <navigation>
-        <route>OCA\SkjalfSearch\Controller\SearchController::index</route>
+        <route>skjalfsearch.search.index</route>
     </navigation>
 </info>
