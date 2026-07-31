@@ -4,19 +4,24 @@
   "description": "Skjalf Search - AI-powered image search for Nextcloud",
   "main": "src/main.js",
   "scripts": {
-    "dev": "node build/dev-server.js",
-    "build": "node build/build.js",
-    "lint": "eslint --ext .js,.vue src/"
+    "build": "webpack --node-env production --config webpack.config.js",
+    "dev": "webpack --node-env development --config webpack.config.js --watch"
   },
   "dependencies": {
+    "@nextcloud/axios": "^2.6.0",
+    "@nextcloud/l10n": "^3.0.0",
+    "@nextcloud/router": "^3.0.0",
     "pinia": "^2.1.7",
     "vue": "^3.3.0"
   },
   "devDependencies": {
-    "@nextcloud/babel-config": "^1.0.0",
     "@nextcloud/browserslist-config": "^3.0.0",
-    "@nextcloud/eslint-config": "^8.4.1",
-    "@nextcloud/webpack-vue-config": "^6.0.0",
-    "vue-loader": "^17.0.0"
+    "css-loader": "^7.0.0",
+    "sass": "^1.70.0",
+    "sass-loader": "^16.0.0",
+    "vue-loader": "^17.4.2",
+    "webpack": "^5.90.0",
+    "webpack-cli": "^5.1.0",
+    "vue-style-loader": "^4.1.3"
   }
 }

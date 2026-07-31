@@ -1,0 +1,29 @@
+# Node modules
+node_modules/
+
+# Build artifacts
+js/
+l10n/*.js
+l10n/*.js.map
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nextcloud app - generated files
+apps/
