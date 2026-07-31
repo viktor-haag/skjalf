@@ -35,4 +35,8 @@
     <dependencies>
         <nextcloud min-version="28" max-version="31"/>
     </dependencies>
+
+    <navigation>
+        <route>OCA\SkjalfSearch\Controller\SearchController::index</route>
+    </navigation>
 </info>

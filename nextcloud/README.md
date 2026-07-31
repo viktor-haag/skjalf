@@ -42,12 +42,65 @@ AI-powered image search for Nextcloud using semantic embeddings.
 
 ## Setup
 
-### Nextcloud App
-1. Copy `skjalf-search/` to your Nextcloud `apps/` directory
-2. Enable the app in Nextcloud admin settings
-3. Configure the embedder service URL in `lib/Controller/APIClient.php`
+### Option 1: Docker Compose (Recommended)
 
-### Embedder Service
+```bash
+cd nextcloud
+docker-compose up -d
+```
+
+This starts all services:
+- **Nextcloud**: http://localhost:8080
+- **Embedder Service**: http://localhost:8101
+- **ChromaDB**: http://localhost:8000
+- **MySQL**: localhost:3306
+- **Redis**: localhost:6379
+
+### Option 2: Manual Installation
+
+#### 1. Install Nextcloud App
+
+```bash
+# Copy to custom_apps directory
+cp -r skjalf-search /path/to/nextcloud/custom_apps/skjalf-search
+
+# Set correct permissions
+chown -R www-data:www-data /path/to/nextcloud/custom_apps/skjalf-search
+
+# Enable the app
+cd /path/to/nextcloud
+sudo -u www-data php occ app:enable skjalf-search
+```
+
+The app will appear in the **left sidebar** of Nextcloud.
+
+#### 2. Build and Run Frontend
+
+```bash
+cd skjalf-search
+npm install
+npm run build
+```
+
+This compiles the Vue.js frontend and outputs to `js/app.js`.
+
+#### 3. Configure Embedder Service URL
+
+The app needs to know where the Python embedder service is running.
+
+**For Docker Compose**: The default is already configured correctly.
+
+**For manual installation**, update the port in `skjalf-search/lib/Controller/APIClient.php`:
+
+```php
+// Line 42: Change from 8765 to 8101
+return 'http://127.0.0.1:8101';
+```
+
+Or set it via Nextcloud's app configuration.
+
+#### 4. Start Embedder Service
+
 ```bash
 cd embedder-service
 pip install -r requirements.txt
@@ -58,6 +111,7 @@ Set environment variables:
 - `SKJAFALF_API_URL` - URL to Skjalf core API
 - `CHROMA_HOST` - ChromaDB host (default: localhost)
 - `CHROMA_PORT` - ChromaDB port (default: 8000)
+- `EMBEDDING_MODEL` - Model for embeddings (default: all-MiniLM-L6-v2)
 
 ## Ingest/Query/Retrieve Flow
 

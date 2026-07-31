@@ -15,13 +15,17 @@ namespace OCA\SkjalfSearch\Controller;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\IRequest;
 use OCP\IUserSession;
+use OCP\AppFramework\Http\TemplateResponse;
 
 /**
  * REST API controller for semantic search operations.
  *
  * Endpoints:
+ *   GET  /                                          - Render main page
  *   GET  /api/v1/search?q=...&limit=20&threshold=0.5  - Semantic search
  *   POST /api/v1/embed/file/{fileId}                  - Embed single file
  *   POST /api/v1/embed/folder/{folderId}              - Embed all files in folder
@@ -224,5 +228,23 @@ class SearchController extends Controller {
 			}
 		}
 		return $images;
+	}
+
+	/**
+	 * Render the main search page.
+	 *
+	 * @return TemplateResponse
+	 */
+	#[NoAdminRequired]
+	public function index(): TemplateResponse {
+		$response = new TemplateResponse($this->appName, 'app', [], 'base');
+		$csp = new ContentSecurityPolicy();
+		$csp->addAllowedScriptDomain('\'self\'');
+		$csp->addAllowedScriptDomain('\'unsafe-inline\'');
+		$csp->addAllowedImgDomain('\'self\'');
+		$csp->addAllowedStyleDomain('\'self\'');
+		$csp->addAllowedStyleDomain('\'unsafe-inline\'');
+		$response->setContentSecurityPolicy($csp);
+		return $response;
 	}
 }
