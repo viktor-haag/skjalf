@@ -33,7 +33,7 @@
         <developer>https://github.com/skjalf/skjalf/tree/main/nextcloud</developer>
     </documentation>
     <dependencies>
-        <nextcloud min-version="28" max-version="31"/>
+        <nextcloud min-version="28" max-version="34"/>
     </dependencies>
 
     <navigation>
