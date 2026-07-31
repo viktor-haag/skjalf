@@ -37,6 +37,6 @@
     </dependencies>
 
     <navigation>
-        <route>skjalfsearch.search.index</route>
+        <route>skjalfsearch.SearchController#index</route>
     </navigation>
 </info>

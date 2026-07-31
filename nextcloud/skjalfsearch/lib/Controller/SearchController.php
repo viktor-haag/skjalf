@@ -20,6 +20,9 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\Core\Util;
 
 /**
  * REST API controller for semantic search operations.
@@ -234,16 +237,13 @@ class SearchController extends Controller {
 	 *
 	 * @return TemplateResponse
 	 */
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/')]
 	#[NoAdminRequired]
 	public function index(): TemplateResponse {
-		$response = new TemplateResponse($this->appName, 'app', [], 'base');
-		$csp = new ContentSecurityPolicy();
-		$csp->addAllowedScriptDomain('\'self\'');
-		$csp->addAllowedScriptDomain('\'unsafe-inline\'');
-		$csp->addAllowedImgDomain('\'self\'');
-		$csp->addAllowedStyleDomain('\'self\'');
-		$csp->addAllowedStyleDomain('\'unsafe-inline\'');
-		$response->setContentSecurityPolicy($csp);
+		Util::addScript($this->appName, 'app');
+		Util::addStyle($this->appName, 'app');
+		$response = new TemplateResponse($this->appName, 'app');
 		return $response;
 	}
 }
