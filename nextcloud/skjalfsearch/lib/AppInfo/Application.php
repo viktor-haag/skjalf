@@ -23,18 +23,18 @@ declare(strict_types=1);
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-namespace OCA\SkjalfSearch\AppInfo;
+namespace OCA\Skjalfsearch\AppInfo;
 
 use OCP\App\IAppManager;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
-use OCA\SkjalfSearch\Listener\FileChangedListener;
-use OCA\SkjalfSearch\Listener\NodeChangedListener;
+use OCA\Skjalfsearch\Listener\FileChangedListener;
+use OCA\Skjalfsearch\Listener\NodeChangedListener;
 
 class Application extends App implements IBootstrap {
-	public const APP_NAME = 'skjalf-search';
+	public const APP_NAME = 'skjalfsearch';
 
 	public function __construct() {
 		parent::__construct(self::APP_NAME);

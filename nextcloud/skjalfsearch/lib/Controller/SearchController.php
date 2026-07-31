@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\Controller;
+namespace OCA\Skjalfsearch\Controller;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -55,7 +55,6 @@ class SearchController extends Controller {
 	 * @param int $limit Max results
 	 * @param float $threshold Min similarity
 	 */
-	#[\OCP\AppFramework\Http\HttpResponse::STATUS_OK]
 	public function search(string $query, int $limit = 20, float $threshold = 0.5): JSONResponse {
 		if ($query === '') {
 			return new JSONResponse(['error' => 'Query is required'], Http::STATUS_BAD_REQUEST);

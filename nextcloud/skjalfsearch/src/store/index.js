@@ -2,7 +2,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { defineStore } from 'pinia'
 
-export const useSkjalfStore = defineStore('skjalf-search', {
+export const useSkjalfStore = defineStore('skjalfsearch', {
   state: () => ({
     query: '',
     results: [],
@@ -18,7 +18,7 @@ export const useSkjalfStore = defineStore('skjalf-search', {
       this.error = null
       try {
         const response = await axios.post(
-          generateUrl('/apps/skjalf-search/api/v1/search'),
+          generateUrl('/apps/skjalfsearch/api/v1/search'),
           { query, limit, threshold }
         )
         this.results = response.data.results || []
@@ -32,7 +32,7 @@ export const useSkjalfStore = defineStore('skjalf-search', {
     async getFolders() {
       try {
         const response = await axios.get(
-          generateUrl('/apps/skjalf-search/api/v1/folders')
+          generateUrl('/apps/skjalfsearch/api/v1/folders')
         )
         this.folders = response.data.folders || []
       } catch (e) {
@@ -43,7 +43,7 @@ export const useSkjalfStore = defineStore('skjalf-search', {
     async registerFolder(folderPath) {
       try {
         const response = await axios.post(
-          generateUrl('/apps/skjalf-search/api/v1/folders'),
+          generateUrl('/apps/skjalfsearch/api/v1/folders'),
           { path: folderPath }
         )
         return response.data.status === 'registered'
@@ -56,7 +56,7 @@ export const useSkjalfStore = defineStore('skjalf-search', {
     async embedFile(fileId) {
       try {
         const response = await axios.post(
-          generateUrl('/apps/skjalf-search/api/v1/embed/file/{fileId}'),
+          generateUrl('/apps/skjalfsearch/api/v1/embed/file/{fileId}'),
           { fileId }
         )
         return response.data
@@ -69,7 +69,7 @@ export const useSkjalfStore = defineStore('skjalf-search', {
     async getEmbeddingStatus(fileId) {
       try {
         const response = await axios.get(
-          generateUrl('/apps/skjalf-search/api/v1/status/{fileId}'),
+          generateUrl('/apps/skjalfsearch/api/v1/status/{fileId}'),
           { params: { fileId } }
         )
         this.embeddingStatus[fileId] = response.data

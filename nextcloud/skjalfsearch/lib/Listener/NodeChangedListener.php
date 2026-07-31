@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\Listener;
+namespace OCA\Skjalfsearch\Listener;
 
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -68,7 +68,7 @@ class NodeChangedListener implements IEventListener {
 	 * Remove embedding record for a deleted file.
 	 */
 	private function removeEmbedding(int $fileId): void {
-		$mapper = new \OCA\SkjalfSearch\Db\EmbeddingMapper(
+		$mapper = new \OCA\Skjalfsearch\Db\EmbeddingMapper(
 			\OC::$server->getDatabaseConnection()
 		);
 

@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\BackgroundJob;
+namespace OCA\Skjalfsearch\BackgroundJob;
 
 use OCP\BackgroundJob\QueuedJob;
 use OCP\ILogger;
@@ -48,7 +48,7 @@ class EmbedFileJob extends QueuedJob {
 		$this->logger->debug("Skjalf: Processing embed job for file_id={fileId}", ['fileId' => $fileId]);
 
 		// Mark as processing
-		$mapper = new \OCA\SkjalfSearch\Db\EmbeddingMapper(\OC::$server->getDatabaseConnection());
+		$mapper = new \OCA\Skjalfsearch\Db\EmbeddingMapper(\OC::$server->getDatabaseConnection());
 		$mapper->saveStatus($fileId, 'processing', null, 10);
 
 		try {
@@ -66,7 +66,7 @@ class EmbedFileJob extends QueuedJob {
 			}
 
 			// Send to embedder service
-			$client = new \OCA\SkjalfSearch\Controller\APIClient();
+			$client = new \OCA\Skjalfsearch\Controller\APIClient();
 			$result = $client->embedFile((string) $fileId, $filePath);
 
 			// Update status

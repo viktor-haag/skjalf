@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\Db;
+namespace OCA\Skjalfsearch\Db;
 
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\MultipleObjectsReturnedException;

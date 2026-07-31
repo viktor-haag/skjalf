@@ -1,5 +1,5 @@
 {
-  "name": "skjalf-search",
+  "name": "skjalfsearch",
   "version": "0.1.0",
   "description": "Skjalf Search - AI-powered image search for Nextcloud",
   "main": "src/main.js",

@@ -7,8 +7,8 @@
  * @license AGPL-3.0-or-later
  */
 
-script('skjalf-search', 'app');
-style('skjalf-search', 'app');
+script('skjalfsearch', 'app');
+style('skjalfsearch', 'app');
 ?>
 
-<div id="skjalf-search-content"></div>
+<div id="skjalfsearch-content"></div>

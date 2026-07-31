@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\Controller;
+namespace OCA\Skjalfsearch\Controller;
 
 use Exception;
 
@@ -34,7 +34,7 @@ class APIClient {
 	 */
 	private function resolveBaseUrl(): string {
 		$appConfig = \OC::$server->getAppConfig();
-		$url = $appConfig->getValue('skjalf-search', 'embedder_url');
+		$url = $appConfig->getValue('skjalfsearch', 'embedder_url');
 		if ($url !== '') {
 			return rtrim($url, '/');
 		}

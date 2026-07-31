@@ -9,7 +9,7 @@ services:
       - "8080:80"
     volumes:
       - nextcloud_data:/var/www/html
-      - ./skjalf-search/apps/skjalf-search:/var/www/html/apps/skjalf-search
+      - ./skjalfsearch:/var/www/html/custom_apps/skjalfsearch
     environment:
       - MYSQL_HOST=db
       - MYSQL_DATABASE=nextcloud

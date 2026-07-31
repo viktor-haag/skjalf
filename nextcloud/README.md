@@ -21,7 +21,7 @@ AI-powered image search for Nextcloud using semantic embeddings.
 
 ## Components
 
-### 1. Nextcloud App (`skjalf-search/`)
+### 1. Nextcloud App (`skjalfsearch/`)
 - **Frontend**: Vue.js 3 + Pinia store
 - **Backend**: PHP controllers, services, listeners
 - **Features**:
@@ -62,14 +62,14 @@ This starts all services:
 
 ```bash
 # Copy to custom_apps directory
-cp -r skjalf-search /path/to/nextcloud/custom_apps/skjalf-search
+cp -r skjalfsearch /path/to/nextcloud/custom_apps/skjalfsearch
 
 # Set correct permissions
-chown -R www-data:www-data /path/to/nextcloud/custom_apps/skjalf-search
+chown -R www-data:www-data /path/to/nextcloud/custom_apps/skjalfsearch
 
 # Enable the app
 cd /path/to/nextcloud
-sudo -u www-data php occ app:enable skjalf-search
+sudo -u www-data php occ app:enable skjalfsearch
 ```
 
 The app will appear in the **left sidebar** of Nextcloud.
@@ -77,7 +77,7 @@ The app will appear in the **left sidebar** of Nextcloud.
 #### 2. Build and Run Frontend
 
 ```bash
-cd skjalf-search
+cd skjalfsearch
 npm install
 npm run build
 ```
@@ -90,7 +90,7 @@ The app needs to know where the Python embedder service is running.
 
 **For Docker Compose**: The default is already configured correctly.
 
-**For manual installation**, update the port in `skjalf-search/lib/Controller/APIClient.php`:
+**For manual installation**, update the port in `skjalfsearch/lib/Controller/APIClient.php`:
 
 ```php
 // Line 42: Change from 8765 to 8101

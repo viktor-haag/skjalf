@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\Service;
+namespace OCA\Skjalfsearch\Service;
 
 use OCP\IDBConnection;
 use OCP\ILogger;
@@ -27,14 +27,14 @@ use OCP\ILogger;
 class EmbedderService {
 	private IDBConnection $db;
 	private ILogger $logger;
-	private \OCA\SkjalfSearch\Controller\APIClient $apiClient;
-	private \OCA\SkjalfSearch\Db\EmbeddingMapper $mapper;
+	private \OCA\Skjalfsearch\Controller\APIClient $apiClient;
+	private \OCA\Skjalfsearch\Db\EmbeddingMapper $mapper;
 
 	public function __construct(
 		IDBConnection $db,
 		ILogger $logger,
-		\OCA\SkjalfSearch\Controller\APIClient $apiClient,
-		\OCA\SkjalfSearch\Db\EmbeddingMapper $mapper,
+		\OCA\Skjalfsearch\Controller\APIClient $apiClient,
+		\OCA\Skjalfsearch\Db\EmbeddingMapper $mapper,
 	) {
 		$this->db = $db;
 		$this->logger = $logger;
@@ -92,7 +92,7 @@ class EmbedderService {
 		$this->mapper->saveStatus($fileId, 'pending', null, 0);
 
 		$jobList = \OC::$server->getJobList();
-		$job = new \OCA\SkjalfSearch\BackgroundJob\EmbedFileJob($jobList);
+		$job = new \OCA\Skjalfsearch\BackgroundJob\EmbedFileJob($jobList);
 		$job->setFileId($fileId);
 		$job->setFilePath($filePath);
 		$jobList->add($job);

@@ -10,7 +10,7 @@ declare(strict_types=1);
  * @license AGPL-3.0-or-later
  */
 
-namespace OCA\SkjalfSearch\Listener;
+namespace OCA\Skjalfsearch\Listener;
 
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -70,7 +70,7 @@ class FileChangedListener implements IEventListener {
 	 * Uses Nextcloud's job queue to schedule embedding.
 	 */
 	private function queueForEmbedding(int $fileId, string $filePath): void {
-		$job = new \OCA\SkjalfSearch\BackgroundJob\EmbedFileJob(
+		$job = new \OCA\Skjalfsearch\BackgroundJob\EmbedFileJob(
 			\OC::$server->getJobList()
 		);
 		$job->setFileId($fileId);
