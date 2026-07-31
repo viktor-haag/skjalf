@@ -39,7 +39,8 @@ class APIClient {
 			return rtrim($url, '/');
 		}
 		// Default: service runs on localhost
-		return 'http://127.0.0.1:8765';
+		return 'http://embedder-service:8101';                                                                                          
+
 	}
 
 	/**
