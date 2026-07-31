@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # Nextcloud application
+  nextcloud:
+    image: nextcloud:apache
+    container_name: nextcloud
+    ports:
+      - "8080:80"
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ./skjalf-search/apps/skjalf-search:/var/www/html/apps/skjalf-search
+    environment:
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=admin
+      - OVERWRITEHOST=localhost
+      - OVERWRITEPROTOCOL=http
+    depends_on:
+      - db
+      - redis
+    networks:
+      - skjalf-network
+
+  # MySQL database
+  db:
+    image: mysql:8.0
+    container_name: nextcloud-db
+    restart: always
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud
+    networks:
+      - skjalf-network
+
+  # Redis cache
+  redis:
+    image: redis:alpine
+    container_name: nextcloud-redis
+    restart: always
+    command: redis-server --requirepass nextcloud
+    volumes:
+      - redis_data:/data
+    networks:
+      - skjalf-network
+
+  # Python embedder service
+  embedder-service:
+    build:
+      context: ./embedder-service
+      dockerfile: Dockerfile
+    container_name: skjalf-embedder
+    ports:
+      - "8101:8101"
+    environment:
+      - SKJAFALF_API_URL=http://embedder-service:8101
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - CHROMA_COLLECTION=skjalf_nextcloud
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    volumes:
+      - chroma_data:/chroma/chroma
+    depends_on:
+      - chromadb
+    networks:
+      - skjalf-network
+
+  # ChromaDB vector store
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    networks:
+      - skjalf-network
+
+volumes:
+  nextcloud_data:
+    driver: local
+  db_data:
+    driver: local
+  redis_data:
+    driver: local
+  chroma_data:
+    driver: local
+
+networks:
+  skjalf-network:
+    driver: bridge
