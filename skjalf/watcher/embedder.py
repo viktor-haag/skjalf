@@ -210,13 +210,24 @@ class Embedder:
 
     @classmethod
     def set_device(cls, device: str) -> None:
-        """Move model and processor to the given device ('cpu' or 'cuda')."""
+        """Move model and processor to the given device ('cpu' or 'cuda').
+
+        If switching to CUDA fails due to OOM, falls back to the original device
+        and logs a warning.
+        """
         if cls._device == device:
             return
+        previous_device = cls._device
         cls._device = device
         if cls._model is not None:
-            cls._model.to(device)
-        logger.info(f"[embedder] device switched to {device}")
+            try:
+                cls._model.to(device)
+                logger.info(f"[embedder] device switched to {device}")
+            except torch.cuda.OutOfMemoryError:
+                cls._device = previous_device
+                logger.warning(
+                    f"[embedder] CUDA OOM when switching to {device}, reverting to {previous_device}"
+                )
 
     @classmethod
     def device(cls) -> str:
