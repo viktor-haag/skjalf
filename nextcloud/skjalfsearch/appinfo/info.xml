@@ -25,7 +25,6 @@
     <licence>agpl</licence>
     <author mail="pn@skjalf.dev" homepage="https://skjalf.dev">Skjalf Team</author>
     <category>tools</category>
-    <category>files</category>
     <bugs>https://github.com/skjalf/skjalf/issues</bugs>
     <repository type="git">https://github.com/skjalf/skjalf.git</repository>
     <documentation>
@@ -38,5 +37,7 @@
 
     <navigation>
         <route>skjalfsearch.SearchController#index</route>
+        <name>Skjalf Search</name>
+        <icon>/img/app.svg</icon>
     </navigation>
 </info>
