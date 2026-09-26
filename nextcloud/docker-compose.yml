@@ -35,7 +35,7 @@ services:
     environment:
       NEXTCLOUD_URL: http://nextcloud/index.php
       APP_ID: skjalf
-      APP_VERSION: 0.1.0
+      APP_VERSION: 0.1.1
       APP_HOST: skjalf
       APP_PORT: "23000"
       APP_SECRET: ${APP_SECRET:?Set APP_SECRET in nextcloud/.env}
