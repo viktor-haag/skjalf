@@ -315,7 +315,7 @@ class SkjalfService:
 
     def _ensure_encoder(self) -> AlignEncoder:
         if self.encoder is None:
-            self.encoder = AlignEncoder(cache_dir=self.model_cache, device="cpu")
+            self.encoder = AlignEncoder(cache_dir=self.model_cache)
         return self.encoder
 
     async def _load_encoder(self) -> AlignEncoder:

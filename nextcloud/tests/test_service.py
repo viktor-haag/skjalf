@@ -18,6 +18,7 @@ from ex_app.lib.nextcloud_files import (
     resolve_indexed_file,
     scan_root,
 )
+from ex_app.lib.align import AlignEncoder
 from ex_app.lib.service import AppDisabled, SkjalfService
 
 
@@ -112,6 +113,11 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(asyncio.run(self.service.user_id(nc)), "alice")
         with self.assertRaises(AppDisabled):
             asyncio.run(self.service.start(nc, self.root_id))
+
+    def test_service_constructs_the_align_encoder_without_loading_the_model(self):
+        encoder = self.service._ensure_encoder()
+        self.assertIsInstance(encoder, AlignEncoder)
+        self.assertEqual(encoder.cache_dir, self.service.model_cache)
 
     def test_sdk_fsnode_filters_use_info_trash_and_keep_permission_guards(self):
         def node(*, permissions="G", **extra):

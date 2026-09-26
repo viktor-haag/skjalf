@@ -39,22 +39,22 @@ class AlignEncoder:
             ).to("cpu")
             self._model.eval()
 
-    def image_embedding(self, path: Path) -> list[float]:
+    def encode_image(self, image: Image.Image) -> np.ndarray:
         self.ensure_loaded()
         import torch
 
-        with Image.open(path) as source:
-            image = source.convert("RGB")
+        if image.mode != "RGB":
+            image = image.convert("RGB")
         inputs = self._processor(images=image, return_tensors="pt")
         with torch.inference_mode():
             vector = self._model.get_image_features(**inputs).pooler_output.squeeze().cpu().numpy()
-        return np.asarray(vector, dtype=np.float32).reshape(-1).tolist()
+        return np.asarray(vector, dtype=np.float32).reshape(-1)
 
-    def text_embedding(self, query: str) -> list[float]:
+    def encode_text(self, query: str) -> np.ndarray:
         self.ensure_loaded()
         import torch
 
         inputs = self._tokenizer(query, return_tensors="pt")
         with torch.inference_mode():
             vector = self._model.get_text_features(**inputs).pooler_output.squeeze().cpu().numpy()
-        return np.asarray(vector, dtype=np.float32).reshape(-1).tolist()
+        return np.asarray(vector, dtype=np.float32).reshape(-1)
