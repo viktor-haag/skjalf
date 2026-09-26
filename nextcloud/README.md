@@ -56,7 +56,7 @@ Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextclo
 5. Vor dem Befehl den vollständigen Platzhalterwert `<APP_SECRET aus .env>` durch den Secret-Wert aus `.env` ersetzen. Der JSON-Text steht in einfachen Anführungszeichen; die Shell ersetzt den Platzhalter daher nicht automatisch. Das bereits laufende ExApp registrieren. Die `routes` unten sind die AppAPI-Zugriffsregeln aus `appinfo/info.xml`; `APP_HOST`, `APP_PORT`, `APP_ID` und `APP_SECRET` müssen exakt zur laufenden Compose-Umgebung passen.
 
    ```sh
-   docker compose exec -u www-data nextcloud php occ app_api:app:register skjalf skjalf-manual --json-info '{"id":"skjalf","name":"Skjalf","daemon_config_name":"skjalf-manual","version":"0.1.0","secret":"<APP_SECRET aus .env>","host":"skjalf","protocol":"http","port":23000,"routes":[{"url":"^/?heartbeat$","verb":"GET","access_level":"PUBLIC"},{"url":"^/?init$","verb":"POST","access_level":"USER"},{"url":"^/?enabled$","verb":"PUT","access_level":"USER"},{"url":"^/?$","verb":"GET","access_level":"USER"},{"url":"^/?api/.*$","verb":"GET,POST,DELETE","access_level":"USER"},{"url":"^/?js/.*$","verb":"GET","access_level":"USER"},{"url":"^/?css/.*$","verb":"GET","access_level":"USER"},{"url":"^/?img/.*$","verb":"GET","access_level":"USER"}]}' --wait-finish
+   docker compose exec -u www-data nextcloud php occ app_api:app:register skjalf skjalf-manual --json-info '{"id":"skjalf","name":"Skjalf","daemon_config_name":"skjalf-manual","version":"0.1.1","secret":"<APP_SECRET aus .env>","host":"skjalf","protocol":"http","port":23000,"external-app":{"routes":[{"url":"^/?heartbeat$","verb":"GET","access_level":"PUBLIC"},{"url":"^/?init$","verb":"POST","access_level":"USER"},{"url":"^/?enabled$","verb":"PUT","access_level":"USER"},{"url":"^/?$","verb":"GET","access_level":"USER"},{"url":"^/?api/.*$","verb":"GET,POST,DELETE","access_level":"USER"},{"url":"^/?js/.*$","verb":"GET","access_level":"USER"},{"url":"^/?css/.*$","verb":"GET","access_level":"USER"},{"url":"^/?img/.*$","verb":"GET","access_level":"USER"}]}}' --wait-finish
    docker compose exec -u www-data nextcloud php occ app_api:app:enable skjalf
    ```
 
@@ -75,13 +75,30 @@ docker compose up -d --force-recreate skjalf
 
 Lade die Nextcloud-Seite anschließend neu. Eine erneute AppAPI-Registrierung ist für diesen Frontend-Neubau nicht erforderlich.
 
+### Wenn das Menü vorhanden ist, die Seite aber leer bleibt
+
+Wenn Browser-Konsole oder Netzwerkanzeige für `js/skjalf-main.js` oder `img/skjalf.svg` eine HTML-404-Antwort aus dem AppAPI-Proxy zeigen, fehlen wahrscheinlich die gespeicherten Proxy-Routen. Baue das App-Image neu und erstelle nur den Skjalf-Container neu:
+
+```sh
+docker compose up --build -d --force-recreate --no-deps skjalf
+```
+
+Aktualisiere anschließend die registrierten App-Metadaten aus der aktuellen XML-Datei. Kopiere sie an einen separaten Pfad im Nextcloud-Container: Ein bereits bestehender Datei-Bind-Mount kann nach dem Austausch der Hostdatei noch auf die alte Datei zeigen. Die Version `0.1.1` sorgt dafür, dass AppAPI die Metadatenaktualisierung nicht wegen gleicher Version überspringt.
+
+```sh
+docker compose cp ./appinfo/info.xml nextcloud:/tmp/skjalf-info-update.xml
+docker compose exec -u www-data nextcloud php occ app_api:app:update skjalf --info-xml /tmp/skjalf-info-update.xml --wait-finish
+```
+
+Lade danach die Nextcloud-Seite im Browser neu. Diese Folge aktualisiert die vorhandene Registrierung, ohne Skjalf abzumelden oder seine persistenten Daten-Volumes zu löschen.
+
 ## Bestehende Nextcloud-Installation
 
 Installiere oder initialisiere Nextcloud nicht neu. Installiere AppAPI in der vorhandenen Instanz und registriere einen `manual-install`-Daemon, der das bereits laufende Skjalf-Containerziel und Nextcloud über ihre jeweiligen internen Netzwerkadressen erreichen kann. Baue das lokale CPU-Image mit `docker build -t skjalf:dev -f nextcloud/Dockerfile nextcloud` und starte es in einem Docker-Netzwerk, das den AppAPI-Dienst erreicht. Beispiel für den Container (Werte für dein Netzwerk und deine URL anpassen):
 
 ```sh
 docker run -d --name skjalf --restart unless-stopped --network "${NEXTCLOUD_NETWORK}" --network-alias skjalf \
-  -e APP_ID=skjalf -e APP_VERSION=0.1.0 -e APP_HOST=skjalf -e APP_PORT=23000 \
+  -e APP_ID=skjalf -e APP_VERSION=0.1.1 -e APP_HOST=skjalf -e APP_PORT=23000 \
   -e APP_SECRET="${APP_SECRET}" -e AA_VERSION="${AA_VERSION}" \
   -e NEXTCLOUD_URL="${NEXTCLOUD_URL}" \
   -e APP_PERSISTENT_STORAGE=/app_data -v skjalf-appdata:/app_data \

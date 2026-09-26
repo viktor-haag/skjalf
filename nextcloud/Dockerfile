@@ -11,7 +11,7 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ID=skjalf \
-    APP_VERSION=0.1.0 \
+    APP_VERSION=0.1.1 \
     APP_PORT=23000 \
     APP_PERSISTENT_STORAGE=/app_data \
     HF_HOME=/app_data/models
