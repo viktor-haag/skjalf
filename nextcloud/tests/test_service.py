@@ -14,6 +14,7 @@ from PIL import Image
 
 from ex_app.lib.nextcloud_files import (
     _is_regular_personal_node,
+    list_personal_folders,
     resolve_indexed_file,
     scan_root,
 )
@@ -173,6 +174,22 @@ class ServiceTests(unittest.TestCase):
         self.assertIs(discovered["photo-id"], image_node)
         self.assertIs(resolved, image_node)
         self.assertEqual(files.last_file_id, "photo-id")
+
+    def test_folder_browser_exposes_snake_case_file_id_for_root_request(self):
+        folder = FsNode(
+            "files/alice/Photos/", file_id="folder-id", etag='"folder-etag"', permissions="G"
+        )
+
+        class DavFiles:
+            async def listdir(self, path, depth=1):
+                self.last_listing = (path, depth)
+                return [folder]
+
+        folders = asyncio.run(
+            list_personal_folders(SimpleNamespace(files=DavFiles()), "")
+        )
+        self.assertEqual(folders[0]["file_id"], "folder-id")
+        self.assertNotIn("fileId", folders[0])
 
     def test_indexed_count_aliases_work_for_roots_and_root_status(self):
         self.assertEqual(self.service.roots(self.user)[0]["indexed"], 0)

@@ -74,7 +74,7 @@ async def list_personal_folders(nc: Any, path: str) -> list[dict[str, str]]:
         if folder_path != path and not _path_is_below(folder_path, path):
             continue
         folders.append(
-            {"fileId": node.file_id, "path": folder_path, "name": node.name, "etag": node.etag}
+            {"file_id": node.file_id, "path": folder_path, "name": node.name, "etag": node.etag}
         )
     return folders
 

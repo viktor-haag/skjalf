@@ -115,6 +115,44 @@ import { generateUrl } from '@nextcloud/router'
 
 const API = generateUrl('/apps/app_api/proxy/skjalf')
 
+const VALIDATION_MESSAGES = {
+  extra_forbidden: 'Dieses Feld wird nicht unterstützt.',
+  json_invalid: 'Die Anfrage ist ungültig formatiert.',
+  missing: 'Pflichtfeld fehlt.',
+  string_too_long: 'Der Text ist zu lang.',
+  string_too_short: 'Der Text ist zu kurz.',
+  string_type: 'Bitte Text eingeben.',
+}
+
+function formatApiErrorDetail(detail) {
+  if (typeof detail === 'string' && detail.trim()) return detail
+
+  if (Array.isArray(detail)) {
+    const messages = detail.map((issue) => {
+      if (typeof issue === 'string') return issue
+      if (!issue || typeof issue !== 'object') return ''
+
+      const location = Array.isArray(issue.loc)
+        ? issue.loc
+          .filter(part => part !== 'body')
+          .map((part) => ({ file_id: 'Datei-ID', query: 'Suchbegriff' }[part] || String(part)))
+          .join(' → ')
+        : ''
+      const message = VALIDATION_MESSAGES[issue.type]
+        || (typeof issue.msg === 'string' ? issue.msg : '')
+      if (!message) return ''
+      return location ? `${location}: ${message}` : message
+    }).filter(Boolean)
+
+    return messages.length ? messages.join(' · ') : 'Die Anfrage enthält ungültige Angaben.'
+  }
+
+  if (detail && typeof detail === 'object' && typeof detail.message === 'string') {
+    return detail.message
+  }
+  return 'Die Anfrage an Skjalf ist fehlgeschlagen.'
+}
+
 export default {
   name: 'SkjalfApp',
   data() {
@@ -134,7 +172,7 @@ export default {
         return response.data || {}
       } catch (error) {
         const detail = error.response && error.response.data && error.response.data.detail
-        throw new Error(detail || 'Die Anfrage an Skjalf ist fehlgeschlagen.')
+        throw new Error(formatApiErrorDetail(detail))
       }
     },
     async refresh() {
