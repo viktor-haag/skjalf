@@ -17,6 +17,20 @@ Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextclo
 
    Richte Nextcloud danach unter `http://localhost:8080` im Browser ein. Der Compose-Stack setzt kein Nextcloud-Admin-Konto; Benutzername und Passwort legst du im Einrichtungsdialog fest.
 
+   Erlaube anschließend auch den internen Docker-Hostnamen `nextcloud`, über den Skjalf die Nextcloud-API aufruft. Prüfe zuerst die vorhandenen Einträge:
+
+   ```sh
+   docker compose exec -u www-data nextcloud php occ config:system:get trusted_domains
+   ```
+
+   Bei einer frischen Einrichtung mit nur einem Eintrag ist Index `1` frei:
+
+   ```sh
+   docker compose exec -u www-data nextcloud php occ config:system:set trusted_domains 1 --value=nextcloud
+   ```
+
+   Falls bereits mehrere Einträge vorhanden sind, verwende stattdessen einen freien Index, ohne einen vorhandenen Hostnamen zu ersetzen. Die Browseradresse und der interne Hostname müssen beide erlaubt bleiben. Das Setzen von `NEXTCLOUD_TRUSTED_DOMAINS` im Compose-Environment allein behebt eine bereits im Browser eingerichtete Installation nicht zuverlässig.
+
 3. Prüfe AppAPI in Nextcloud. Nextcloud ab Version 30.0.1 installiert AppAPI standardmäßig automatisch. Wenn `app_api` in der App-Verwaltung vorhanden, aber deaktiviert ist, aktiviere es; installiere AppAPI dort nur, wenn es tatsächlich fehlt. Lies anschließend die installierte AppAPI-Version aus:
 
    ```sh
@@ -62,6 +76,10 @@ docker run -d --name skjalf --restart unless-stopped --network "${NEXTCLOUD_NETW
 Setze `NEXTCLOUD_NETWORK`, `APP_SECRET`, `AA_VERSION` und `NEXTCLOUD_URL` in deiner Shell auf die eigenen Werte. `NEXTCLOUD_URL` muss aus dem Container erreichbar sein. Registriere den Daemon so, dass Nextcloud den App-Host `skjalf` erreichen kann. Ersetze im JSON-Befehl außerdem den Secret-Platzhalter durch den Wert aus `$APP_SECRET`; einfache Anführungszeichen verhindern Shell-Ersetzung. Bei einem anders benannten Container muss `APP_HOST` in `docker run`, dem Daemon-Netzwerk und der JSON-Registrierung konsistent geändert werden. `APP_PORT` bleibt in allen drei Stellen `23000`, solange du keinen anderen Port konfigurierst. Die App benötigt nur ihr eigenes persistentes Volume; mounte weder das Nextcloud-Datenverzeichnis noch persönliche Dateien in den Container.
 
 ## Ablauf und Grenzen
+
+### HTTP 400 beim Aktivieren
+
+Wenn `/heartbeat` erfolgreich ist, `/enabled?enabled=1` aber mit HTTP 500 scheitert und der Traceback einen HTTP 400 bei `GET /ocs/v1.php/cloud/capabilities` enthält, prüfe zuerst die Nextcloud-`trusted_domains`. Für diesen Compose-Stack muss der interne Hostname `nextcloud` zugelassen sein; siehe Einrichtung oben. Der HTTP-400-Code allein beweist die Ursache nicht: Falls der Fehler danach bestehen bleibt, sind die Nextcloud-Logs bzw. die Antwort auf diesen API-Aufruf zur weiteren Diagnose erforderlich. Nach der Korrektur Skjalf in der Nextcloud-App-Verwaltung deaktivieren und erneut aktivieren, damit die Menüregistrierung wiederholt wird. Ein erneuter Frontend- oder Container-Build ist dafür nicht nötig.
 
 - Beim Öffnen oder Aktualisieren der Oberfläche gleicht Skjalf jeden ausgewählten Ordner vollständig über WebDAV ab. Ein fehlgeschlagener Scan wird nicht als Löschung interpretiert.
 - Die Indizierung verwendet einen Worker und verarbeitet pro Bild den Download, die ALIGN-Einbettung und den ETag-Abgleich. Nach einem App-Neustart werden laufende Jobs pausiert.
