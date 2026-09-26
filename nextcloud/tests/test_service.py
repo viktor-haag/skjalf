@@ -6,10 +6,17 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from nc_py_api.files import FsNode
 from PIL import Image
 
+from ex_app.lib.nextcloud_files import (
+    _is_regular_personal_node,
+    resolve_indexed_file,
+    scan_root,
+)
 from ex_app.lib.service import AppDisabled, SkjalfService
 
 
@@ -104,6 +111,68 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(asyncio.run(self.service.user_id(nc)), "alice")
         with self.assertRaises(AppDisabled):
             asyncio.run(self.service.start(nc, self.root_id))
+
+    def test_sdk_fsnode_filters_use_info_trash_and_keep_permission_guards(self):
+        def node(*, permissions="G", **extra):
+            return FsNode(
+                "files/alice/Photos/photo.jpg",
+                file_id="photo-id",
+                etag='"etag-1"',
+                mimetype="image/jpeg",
+                permissions=permissions,
+                **extra,
+            )
+
+        self.assertTrue(_is_regular_personal_node(node()))
+        self.assertFalse(_is_regular_personal_node(node(trashbin_filename="photo.jpg")))
+        shared = node(permissions="SG")
+        mounted = node(permissions="MG")
+        unreadable = node(permissions="R")
+        version = node()
+        version.info.is_version = True
+        self.assertFalse(_is_regular_personal_node(shared))
+        self.assertFalse(_is_regular_personal_node(mounted))
+        self.assertFalse(_is_regular_personal_node(unreadable))
+        self.assertFalse(_is_regular_personal_node(version))
+
+    def test_scan_root_returns_sdk_nodes_by_file_id_and_file_resolver_uses_id_first(self):
+        root_node = FsNode(
+            "files/alice/Photos/", file_id="root-id", etag='"root-etag"', permissions="G"
+        )
+        image_node = FsNode(
+            "files/alice/Photos/photo.jpg",
+            file_id="photo-id",
+            etag='"photo-etag"',
+            mimetype="image/jpeg",
+            permissions="G",
+        )
+
+        class DavFiles:
+            async def by_path(self, path):
+                self.last_path = path
+                return root_node
+
+            async def by_id(self, file_id):
+                self.last_file_id = file_id
+                return image_node
+
+            async def listdir(self, path, depth=1):
+                self.last_listing = (path, depth)
+                return [image_node] if path == "Photos" else []
+
+        files = DavFiles()
+        nc = SimpleNamespace(files=files)
+
+        async def run():
+            scanned_root, discovered = await scan_root(nc, root_node)
+            resolved = await resolve_indexed_file(nc, "photo-id", "Photos")
+            return scanned_root, discovered, resolved
+
+        scanned_root, discovered, resolved = asyncio.run(run())
+        self.assertIs(scanned_root, root_node)
+        self.assertIs(discovered["photo-id"], image_node)
+        self.assertIs(resolved, image_node)
+        self.assertEqual(files.last_file_id, "photo-id")
 
     def test_indexed_count_aliases_work_for_roots_and_root_status(self):
         self.assertEqual(self.service.roots(self.user)[0]["indexed"], 0)

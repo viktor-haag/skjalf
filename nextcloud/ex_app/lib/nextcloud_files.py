@@ -30,7 +30,7 @@ def _path_is_below(path: str, root: str) -> bool:
 
 def _is_regular_personal_node(node: Any) -> bool:
     """Reject shared mounts and unreadable nodes using Nextcloud's DAV permissions."""
-    if node is None or node.in_trash or node.info.is_version:
+    if node is None or node.info.in_trash or node.info.is_version:
         return False
     if node.is_shared or node.is_mounted or not node.is_readable:
         return False
@@ -88,11 +88,15 @@ async def resolve_personal_folder(nc: Any, file_id: str) -> Any:
     return node
 
 
-async def scan_root(nc: Any, root_file_id: str, root_path: str) -> tuple[Any, list[dict[str, str]]]:
-    """Walk one own directory at a time; never descend through a share or mount."""
-    root_node = await resolve_personal_folder(nc, root_file_id)
+async def scan_root(nc: Any, root_node: Any) -> tuple[Any, dict[str, Any]]:
+    """Walk one validated own directory at a time, collecting current FsNodes by ID."""
+    if not root_node or not root_node.is_dir or not _is_regular_personal_node(root_node):
+        raise FileUnavailable("Der ausgewählte Ordner ist nicht verfügbar.")
     current_root_path = normalize_user_path(root_node.user_path)
-    discovered: dict[str, dict[str, str]] = {}
+    # Recheck every ancestor immediately before the recursive DAV walk so nested
+    # shares and mount points cannot be traversed through an otherwise personal root.
+    await _assert_personal_path(nc, current_root_path)
+    discovered: dict[str, Any] = {}
     pending_dirs = [current_root_path]
     visited_dirs: set[str] = set()
 
@@ -113,15 +117,11 @@ async def scan_root(nc: Any, root_file_id: str, root_path: str) -> tuple[Any, li
                 continue
             if not _is_image(node) or not node.file_id:
                 continue
-            discovered[node.file_id] = {
-                "file_id": node.file_id,
-                "path": child_path,
-                "etag": node.etag,
-            }
-    return root_node, list(discovered.values())
+            discovered[node.file_id] = node
+    return root_node, discovered
 
 
-async def resolve_indexed_file(nc: Any, root_path: str, file_id: str) -> Any:
+async def resolve_indexed_file(nc: Any, file_id: str, root_path: str) -> Any:
     """Re-check existence, current path, and read access immediately before use/display."""
     node = await nc.files.by_id(file_id)
     if not node or node.is_dir or not _is_regular_personal_node(node):
