@@ -8,10 +8,30 @@ Die App liest Dateien ausschließlich über den pro Anfrage authentifizierten Ap
 
 Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextcloud-Datenbank und Skjalf-Datenvolume. Sie verändert keine bestehende Nextcloud-Installation.
 
-1. Docker Compose starten und `nextcloud/` als Arbeitsordner verwenden. `.env.example` als `.env` übernehmen; `APP_SECRET` durch einen langen zufälligen Wert ersetzen und `AA_VERSION` auf die installierte AppAPI-Version setzen. Beide Werte müssen mit der unten beschriebenen Registrierung übereinstimmen.
-2. `docker compose up --build -d` starten und Nextcloud unter `http://localhost:8080` einmalig einrichten.
-3. AppAPI über die Nextcloud-Appverwaltung installieren und aktivieren. Die AppAPI-Version muss mit `AA_VERSION` in `.env` übereinstimmen.
-4. Der Compose-Dienst `skjalf` ist bereits gebaut und läuft im selben Docker-Netzwerk `skjalf_default`. Als Nextcloud-Administrator die manuelle Daemon-Konfiguration registrieren:
+1. Docker Compose starten und `nextcloud/` als Arbeitsordner verwenden. `.env.example` als `.env` übernehmen und `APP_SECRET` durch einen langen zufälligen Wert ersetzen. Lass den `AA_VERSION`-Platzhalter zunächst stehen; er wird erst gebraucht, wenn Skjalf gestartet wird.
+2. Zuerst nur Datenbank und Nextcloud starten:
+
+   ```sh
+   docker compose up -d db nextcloud
+   ```
+
+   Richte Nextcloud danach unter `http://localhost:8080` im Browser ein. Der Compose-Stack setzt kein Nextcloud-Admin-Konto; Benutzername und Passwort legst du im Einrichtungsdialog fest.
+
+3. Prüfe AppAPI in Nextcloud. Nextcloud ab Version 30.0.1 installiert AppAPI standardmäßig automatisch. Wenn `app_api` in der App-Verwaltung vorhanden, aber deaktiviert ist, aktiviere es; installiere AppAPI dort nur, wenn es tatsächlich fehlt. Lies anschließend die installierte AppAPI-Version aus:
+
+   ```sh
+   docker compose exec -u www-data nextcloud php occ app:list
+   ```
+
+   Trage die angezeigte Version von `app_api` in `.env` als `AA_VERSION` ein. Starte Skjalf nicht, solange dort noch der Beispiel-Platzhalter steht.
+
+4. Baue und starte nun nur den Skjalf-Dienst:
+
+   ```sh
+   docker compose up --build -d skjalf
+   ```
+
+   Skjalf läuft im selben Docker-Netzwerk `skjalf_default`. Als Nextcloud-Administrator registriere danach die manuelle Daemon-Konfiguration:
 
    ```sh
    docker compose exec -u www-data nextcloud php occ app_api:daemon:register skjalf-manual "Skjalf local" manual-install http skjalf http://nextcloud/index.php --net=skjalf_default
