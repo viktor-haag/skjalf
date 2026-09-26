@@ -58,11 +58,13 @@
             <p v-if="root.message" class="muted">{{ root.message }}</p>
           </div>
           <div class="root-actions">
-            <button v-if="root.status === 'running' || root.status === 'queued'" class="button secondary" @click="pause(root)">Pausieren</button>
-            <button v-else class="button primary" :disabled="busy || root.available === false" @click="start(root)">
-              {{ root.status === 'paused' || root.status === 'error' ? 'Fortsetzen' : 'Indizierung starten' }}
+            <button v-if="root.status === 'running' || root.status === 'queued'" class="button secondary" :disabled="isRootActionBusy(root) || root.pause_requested" @click="pause(root)">
+              {{ root.pause_requested ? 'Pause angefordert …' : (isRootActionBusy(root) ? 'Wird angefordert …' : 'Pausieren') }}
             </button>
-            <button class="button danger" :disabled="busy" @click="removeRoot(root)">Auswahl entfernen</button>
+            <button v-else class="button primary" :disabled="busy || isRootActionBusy(root) || root.available === false" @click="start(root)">
+              {{ isRootActionBusy(root) ? 'Wird gestartet …' : (root.status === 'paused' || root.status === 'error' ? 'Fortsetzen' : 'Indizierung starten') }}
+            </button>
+            <button class="button danger" :disabled="busy || isRootActionBusy(root)" @click="removeRoot(root)">Auswahl entfernen</button>
           </div>
         </article>
       </div>
@@ -160,36 +162,97 @@ export default {
       roots: [], folders: [], folderPath: '', showBrowser: false,
       selectedRoot: '', query: '', results: [], searched: false,
       busy: false, searching: false, error: '', notice: '',
+      rootActionBusy: {}, statusTimer: null, statusPollPending: false,
+      rootsRevision: 0, rootsRefreshPending: false, componentDisposed: false,
     }
   },
   mounted() {
     this.refresh()
+    this.statusTimer = window.setInterval(() => this.refreshStatus(), 2000)
+  },
+  beforeDestroy() {
+    this.componentDisposed = true
+    if (this.statusTimer !== null) {
+      window.clearInterval(this.statusTimer)
+      this.statusTimer = null
+    }
   },
   methods: {
-    async request(method, path, data) {
+    async request(method, path, data, timeoutMs = 60000) {
       try {
-        const response = await axios({ method, url: `${API}${path}`, data })
+        const response = await axios({ method, url: `${API}${path}`, data, timeout: timeoutMs })
         return response.data || {}
       } catch (error) {
+        if (error && (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT')) {
+          throw new Error('Die Anfrage dauert zu lange. Der Status wird weiter aktualisiert.')
+        }
         const detail = error.response && error.response.data && error.response.data.detail
         throw new Error(formatApiErrorDetail(detail))
       }
     },
+    normalizeRoot(root) {
+      if (!root) return root
+      const normalized = Object.assign({}, root, root.job || {})
+      normalized.job = root.job || null
+      if (normalized.available !== undefined && normalized.available !== null) {
+        normalized.available = Boolean(normalized.available)
+      }
+      normalized.pause_requested = normalized.pause_requested == null
+        ? Boolean(normalized.job && normalized.job.pause_requested)
+        : Boolean(normalized.pause_requested)
+      return normalized
+    },
+    setRoots(roots) {
+      this.roots = (roots || []).map(root => this.normalizeRoot(root))
+      if (!this.roots.some(root => root.root_id === this.selectedRoot)) {
+        this.selectedRoot = this.roots.length ? this.roots[0].root_id : ''
+      }
+    },
+    updateRoot(root) {
+      const normalized = this.normalizeRoot(root)
+      if (!normalized) return
+      const index = this.roots.findIndex(item => item.root_id === normalized.root_id)
+      if (index === -1) {
+        this.roots = this.roots.concat([normalized])
+      } else {
+        this.$set(this.roots, index, normalized)
+      }
+      if (!this.selectedRoot) this.selectedRoot = normalized.root_id
+    },
+    isRootActionBusy(root) {
+      return Boolean(this.rootActionBusy[root.root_id])
+    },
     async refresh() {
+      if (this.rootsRefreshPending) return
+      const revision = ++this.rootsRevision
+      this.rootsRefreshPending = true
       this.busy = true
       this.error = ''
       this.notice = ''
       try {
         const data = await this.request('get', '/api/roots')
-        this.roots = data.roots || []
-        if (!this.roots.some(root => root.root_id === this.selectedRoot)) {
-          this.selectedRoot = this.roots.length ? this.roots[0].root_id : ''
-        }
+        if (!this.componentDisposed && revision === this.rootsRevision) this.setRoots(data.roots)
         if (this.showBrowser) await this.loadFolders()
       } catch (error) {
-        this.error = error.message
+        if (revision === this.rootsRevision) this.error = error.message
       } finally {
+        this.rootsRefreshPending = false
         this.busy = false
+      }
+    },
+    async refreshStatus() {
+      if (this.componentDisposed || this.statusPollPending || this.rootsRefreshPending) return
+      this.statusPollPending = true
+      const revision = this.rootsRevision
+      try {
+        const data = await this.request('get', '/api/status', undefined, 5000)
+        if (!this.componentDisposed && !this.rootsRefreshPending && revision === this.rootsRevision) {
+          this.setRoots(data.roots)
+        }
+      } catch (_error) {
+        // Keep the last good snapshot; the next two-second poll will retry.
+      } finally {
+        this.statusPollPending = false
       }
     },
     async loadFolders() {
@@ -229,20 +292,27 @@ export default {
       await this.rootAction(root, 'index', 'Indizierung wurde gestartet.')
     },
     async pause(root) {
-      await this.rootAction(root, 'pause', 'Die Indizierung pausiert nach der aktuellen Datei.')
+      await this.rootAction(root, 'pause', 'Pause angefordert. Die aktuelle Datei wird noch abgeschlossen.')
     },
     async rootAction(root, action, message) {
-      this.busy = true
+      if (this.isRootActionBusy(root)) return
+      this.$set(this.rootActionBusy, root.root_id, true)
+      this.rootsRevision += 1
       this.error = ''
       this.notice = ''
       try {
-        await this.request('post', `/api/roots/${encodeURIComponent(root.root_id)}/${action}`)
+        const timeoutMs = action === 'pause' ? 15000 : 120000
+        const data = await this.request(
+          'post', `/api/roots/${encodeURIComponent(root.root_id)}/${action}`, undefined, timeoutMs
+        )
+        this.rootsRevision += 1
+        this.updateRoot(data.root)
         this.notice = message
-        await this.refresh()
       } catch (error) {
         this.error = error.message
       } finally {
-        this.busy = false
+        this.rootsRevision += 1
+        this.$delete(this.rootActionBusy, root.root_id)
       }
     },
     async removeRoot(root) {

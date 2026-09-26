@@ -11,7 +11,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from nc_py_api.ex_app import AppAPIAuthMiddleware, anc_app, set_handlers
 from pydantic import BaseModel, ConfigDict, Field
 
-from .service import AppDisabled, ModelNotReady, RootOverlap, RootUnavailable, ServiceError, SkjalfService
+from .service import (
+    AppDisabled, ModelNotReady, RootOverlap, RootUnavailable, ServiceError,
+    SkjalfService, VectorStoreUnavailable,
+)
 
 APP_ID = os.getenv("APP_ID", "skjalf")
 MENU_ENTRY = "skjalf"
@@ -64,6 +67,11 @@ async def service_error_handler(_request: Request, exc: ServiceError) -> JSONRes
 
 @APP.exception_handler(ModelNotReady)
 async def model_not_ready_handler(_request: Request, exc: ModelNotReady) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@APP.exception_handler(VectorStoreUnavailable)
+async def vector_store_unavailable_handler(_request: Request, exc: VectorStoreUnavailable) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 

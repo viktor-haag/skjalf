@@ -41,6 +41,7 @@ services:
       APP_SECRET: ${APP_SECRET:?Set APP_SECRET in nextcloud/.env}
       AA_VERSION: ${AA_VERSION:?Set AA_VERSION to the installed AppAPI version}
       APP_PERSISTENT_STORAGE: /app_data
+      RUST_BACKTRACE: "1"
     expose:
       - "23000"
     volumes:

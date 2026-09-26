@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import io
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from ex_app.lib.nextcloud_files import (
     scan_root,
 )
 from ex_app.lib.align import AlignEncoder
-from ex_app.lib.service import AppDisabled, SkjalfService
+from ex_app.lib.service import AppDisabled, SkjalfService, VectorStoreUnavailable
 
 
 class FakeNode:
@@ -282,6 +283,47 @@ class ServiceTests(unittest.TestCase):
         asyncio.run(run())
         self.assertEqual(collection.upserts, [])
         self.assertEqual(client.deleted, [collection_name])
+
+    def test_native_vector_call_does_not_block_pause(self):
+        started = threading.Event()
+        release = threading.Event()
+        with self.service.lock, self.service.db:
+            self.service.db.execute(
+                "INSERT INTO jobs(user_id,root_id,status,total,processed,failed,pause_requested,updated_at) "
+                "VALUES(?,?, 'running', 1, 0, 0, 0, 1)", (self.user, self.root_id)
+            )
+
+        def blocked_vector_operation():
+            started.set()
+            if not release.wait(5):
+                raise TimeoutError("test vector operation was not released")
+            return "done"
+
+        async def run():
+            worker = asyncio.create_task(self.service._vector_call(blocked_vector_operation))
+            try:
+                self.assertTrue(await asyncio.wait_for(asyncio.to_thread(started.wait, 1), 2))
+                status = await asyncio.wait_for(self.service.pause(FakeNC(), self.root_id), 1)
+                self.assertEqual(status["job"]["pause_requested"], 1)
+            finally:
+                release.set()
+            self.assertEqual(await asyncio.wait_for(worker, 2), "done")
+
+        asyncio.run(run())
+
+    def test_vector_call_normalizes_only_pyo3_panics(self):
+        panic_exception = type("PanicException", (BaseException,), {"__module__": "pyo3_runtime"})
+
+        def panic_operation():
+            raise panic_exception("native panic")
+
+        def system_exit_operation():
+            raise SystemExit(7)
+
+        with self.assertRaises(VectorStoreUnavailable):
+            self.service._call_vector_sync(panic_operation)
+        with self.assertRaises(SystemExit):
+            self.service._call_vector_sync(system_exit_operation)
 
     def test_disabling_app_pauses_queued_work(self):
         with self.service.lock, self.service.db:

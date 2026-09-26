@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import tempfile
@@ -30,6 +31,7 @@ from .nextcloud_files import (
 )
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
+LOGGER = logging.getLogger(__name__)
 
 
 class ServiceError(RuntimeError):
@@ -45,6 +47,10 @@ class RootUnavailable(ServiceError):
 
 
 class ModelNotReady(ServiceError):
+    pass
+
+
+class VectorStoreUnavailable(ServiceError):
     pass
 
 
@@ -74,6 +80,7 @@ class SkjalfService:
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.lock = threading.RLock()
+        self.vector_lock = threading.RLock()
         self.commit_gate = asyncio.Lock()
         self.queue: asyncio.Queue[tuple[Any, str, str]] = asyncio.Queue()
         self.runner: asyncio.Task[None] | None = None
@@ -121,15 +128,16 @@ class SkjalfService:
         return user
 
     async def set_enabled(self, enabled: bool) -> None:
-        self.enabled = enabled
-        if not enabled:
-            # The current image may finish decoding, but the commit gate below
-            # prevents any vector write after disable. Queued work becomes paused.
-            with self.lock, self.db:
-                self.db.execute(
-                    "UPDATE jobs SET pause_requested=1,message='App deaktiviert; Indizierung pausiert',updated_at=? "
-                    "WHERE status IN ('queued','running')", (time.time(),)
-                )
+        async with self.commit_gate:
+            self.enabled = enabled
+            if not enabled:
+                # Serialize disabling with the commit fence so an in-flight native
+                # write cannot outlive the enabled-state transition.
+                with self.lock, self.db:
+                    self.db.execute(
+                        "UPDATE jobs SET pause_requested=1,message='App deaktiviert; Indizierung pausiert',updated_at=? "
+                        "WHERE status IN ('queued','running')", (time.time(),)
+                    )
 
     def _require_enabled(self) -> None:
         if not self.enabled:
@@ -168,6 +176,52 @@ class SkjalfService:
             return None
         return client, client.get_collection(name)
 
+    def _delete_vector_ids_sync(self, user_id: str, root_id: str, file_ids: list[str]) -> None:
+        _client, collection = self._vector_collection(user_id, root_id)
+        collection.delete(ids=file_ids)
+
+    def _upsert_vector_sync(
+        self, user_id: str, root_id: str, file_id: str, vector: list[float], metadata: dict[str, str]
+    ) -> None:
+        _client, collection = self._vector_collection(user_id, root_id)
+        collection.upsert(ids=[file_id], embeddings=[vector], metadatas=[metadata])
+
+    def _delete_vector_collection_sync(self, user_id: str, root_id: str) -> None:
+        client, _collection = self._vector_collection(user_id, root_id)
+        collection_name = "r_" + root_id
+        names = [getattr(item, "name", item) for item in client.list_collections()]
+        if collection_name in names:
+            client.delete_collection(collection_name)
+
+    def _call_vector_sync(self, operation: Any, *args: Any, **kwargs: Any) -> Any:
+        # Keep Chroma's Rust-backed calls serialized while leaving the asyncio
+        # event loop free to serve pause and status requests.
+        with self.vector_lock:
+            try:
+                return operation(*args, **kwargs)
+            except BaseException as exc:
+                error_type = type(exc)
+                if error_type.__module__ == "pyo3_runtime" and error_type.__name__ == "PanicException":
+                    LOGGER.exception("Chroma Rust vector-store panic")
+                    raise VectorStoreUnavailable(
+                        "Der Vektorspeicher ist ausgefallen. Bitte den App-Container neu starten."
+                    ) from exc
+                raise
+
+    async def _vector_call(self, operation: Any, *args: Any, **kwargs: Any) -> Any:
+        worker = asyncio.create_task(
+            asyncio.to_thread(self._call_vector_sync, operation, *args, **kwargs)
+        )
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            # Keep commit_gate held until an in-flight native write actually ends.
+            try:
+                await worker
+            except Exception:
+                pass
+            raise
+
     def _get_root(self, user_id: str, root_id: str) -> Root | None:
         with self.lock:
             row = self.db.execute(
@@ -179,7 +233,7 @@ class SkjalfService:
     def roots(self, user_id: str) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.db.execute(
-                "SELECT r.root_id,r.file_id,r.path,r.etag,r.available,j.status,j.total,j.processed,j.failed,j.message, "
+                "SELECT r.root_id,r.file_id,r.path,r.etag,r.available,j.status,j.total,j.processed,j.failed,j.message,j.pause_requested, "
                 "(SELECT COUNT(*) FROM files f WHERE f.user_id=r.user_id AND f.root_id=r.root_id AND f.status='indexed') AS \"indexed\" "
                 "FROM roots r LEFT JOIN jobs j USING(user_id,root_id) WHERE r.user_id=? ORDER BY r.path",
                 (user_id,),
@@ -283,8 +337,7 @@ class SkjalfService:
                         (user_id, root_id, file_id, item.user_path, str(item.etag)),
                     )
             if stale_vector_ids:
-                _client, collection = self._vector_collection(user_id, root_id)
-                collection.delete(ids=stale_vector_ids)
+                await self._vector_call(self._delete_vector_ids_sync, user_id, root_id, stale_vector_ids)
 
     def root_status(self, user_id: str, root_id: str) -> dict[str, Any]:
         with self.lock:
@@ -391,11 +444,8 @@ class SkjalfService:
                 self.db.execute(
                     "UPDATE roots SET available=0 WHERE user_id=? AND root_id=?", (user_id, root_id)
                 )
-                client, _collection = self._vector_collection(user_id, root_id)
-                collection_name = "r_" + root_id
-                names = [getattr(item, "name", item) for item in client.list_collections()]
-                if collection_name in names:
-                    client.delete_collection(collection_name)
+            await self._vector_call(self._delete_vector_collection_sync, user_id, root_id)
+            with self.lock, self.db:
                 self.db.execute("DELETE FROM roots WHERE user_id=? AND root_id=?", (user_id, root_id))
 
     async def _run_queue(self) -> None:
@@ -460,8 +510,7 @@ class SkjalfService:
             async with self.commit_gate:
                 with self.lock, self.db:
                     self.db.execute("DELETE FROM files WHERE user_id=? AND root_id=? AND file_id=?", (user_id, root_id, row["file_id"]))
-                _client, collection = self._vector_collection(user_id, root_id)
-                collection.delete(ids=[row["file_id"]])
+                await self._vector_call(self._delete_vector_ids_sync, user_id, root_id, [row["file_id"]])
                 self._advance_job(user_id, root_id, failed=False)
             return
         if str(node.etag) != row["etag"]:
@@ -511,8 +560,7 @@ class SkjalfService:
             except FileUnavailable:
                 with self.lock, self.db:
                     self.db.execute("DELETE FROM files WHERE user_id=? AND root_id=? AND file_id=?", (user_id, root_id, row["file_id"]))
-                _client, collection = self._vector_collection(user_id, root_id)
-                collection.delete(ids=[row["file_id"]])
+                await self._vector_call(self._delete_vector_ids_sync, user_id, root_id, [row["file_id"]])
                 self._advance_job(user_id, root_id, failed=False)
                 return
             if str(current.etag) != row["etag"]:
@@ -522,15 +570,12 @@ class SkjalfService:
                         "WHERE user_id=? AND root_id=? AND file_id=?",
                         (current.user_path, str(current.etag), user_id, root_id, row["file_id"]),
                     )
-                _client, collection = self._vector_collection(user_id, root_id)
-                collection.delete(ids=[row["file_id"]])
+                await self._vector_call(self._delete_vector_ids_sync, user_id, root_id, [row["file_id"]])
                 self._advance_job(user_id, root_id, failed=False)
                 return
-            client, collection = self._vector_collection(user_id, root_id)
-            collection.upsert(
-                ids=[row["file_id"]],
-                embeddings=[image_vector.tolist()],
-                metadatas=[{"path": current.user_path, "etag": str(current.etag)}],
+            await self._vector_call(
+                self._upsert_vector_sync, user_id, root_id, row["file_id"], image_vector.tolist(),
+                {"path": current.user_path, "etag": str(current.etag)},
             )
             with self.lock, self.db:
                 self.db.execute(
@@ -564,18 +609,19 @@ class SkjalfService:
             )
         encoder = await self._load_encoder()
         text_vector = await asyncio.to_thread(encoder.encode_text, query.strip())
-        vector_pair = self._existing_vector_collection(user_id, root_id)
+        vector_pair = await self._vector_call(self._existing_vector_collection, user_id, root_id)
         if not vector_pair:
             return []
         _client, collection = vector_pair
-        count = collection.count()
+        count = await self._vector_call(collection.count)
         if not count:
             return []
         limit = min(count, 64)
         valid: list[dict[str, Any]] = []
         checked: set[str] = set()
         while limit:
-            response = collection.query(
+            response = await self._vector_call(
+                collection.query,
                 query_embeddings=[text_vector.tolist()], n_results=limit,
                 include=["metadatas", "distances"],
             )
@@ -609,7 +655,7 @@ class SkjalfService:
                                 "UPDATE files SET path=?,etag=?,status='pending',error=NULL WHERE user_id=? AND root_id=? AND file_id=?",
                                 (current.user_path, str(current.etag), user_id, root_id, file_id),
                             )
-                        collection.delete(ids=[file_id])
+                        await self._vector_call(self._delete_vector_ids_sync, user_id, root_id, [file_id])
                     continue
                 valid.append({
                     "file_id": file_id, "path": current.user_path,
@@ -653,7 +699,7 @@ class SkjalfService:
                 )
 
     async def shutdown(self) -> None:
-        self.enabled = False
+        await self.set_enabled(False)
         with self.lock, self.db:
             self.db.execute(
                 "UPDATE jobs SET pause_requested=1,message='App wird beendet; Indizierung pausiert',updated_at=? "
