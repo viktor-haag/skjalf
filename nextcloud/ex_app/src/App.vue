@@ -94,7 +94,7 @@
       </form>
 
       <div v-if="searched && !results.length" class="empty">Keine aktuellen Treffer gefunden.</div>
-      <div v-if="results.length" class="results">
+      <div v-if="results.length" class="results" tabindex="0" role="region" aria-label="Bildtreffer">
         <a v-for="item in results" :key="item.file_id" class="result-card" :href="fileUrl(item.file_id)" target="_blank" rel="noopener">
           <img :src="previewUrl(item.file_id)" :alt="item.name" loading="lazy" @error="hideBrokenPreview">
           <div class="result-text">
