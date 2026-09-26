@@ -173,7 +173,7 @@ class Catalog:
                 """
                 SELECT r.root_id,r.file_id,r.path,r.etag,r.available,
                     SUM(CASE WHEN f.status='pending' THEN 1 ELSE 0 END) AS pending,
-                    SUM(CASE WHEN f.status='indexed' THEN 1 ELSE 0 END) AS indexed,
+                    SUM(CASE WHEN f.status='indexed' THEN 1 ELSE 0 END) AS "indexed",
                     SUM(CASE WHEN f.status='failed' THEN 1 ELSE 0 END) AS failed
                 FROM roots r LEFT JOIN files f ON f.user_id=r.user_id AND f.root_id=r.root_id
                 WHERE r.user_id=? GROUP BY r.user_id,r.root_id ORDER BY r.path COLLATE NOCASE

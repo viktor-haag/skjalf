@@ -105,6 +105,19 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaises(AppDisabled):
             asyncio.run(self.service.start(nc, self.root_id))
 
+    def test_indexed_count_aliases_work_for_roots_and_root_status(self):
+        self.assertEqual(self.service.roots(self.user)[0]["indexed"], 0)
+        self.assertEqual(self.service.root_status(self.user, self.root_id)["indexed"], 0)
+
+        with self.service.lock, self.service.db:
+            self.service.db.execute(
+                "INSERT INTO files(user_id,root_id,file_id,path,etag,status) VALUES(?,?,?,?,?,'indexed')",
+                (self.user, self.root_id, self.file_id, "/Photos/a.jpg", "etag-1"),
+            )
+
+        self.assertEqual(self.service.roots(self.user)[0]["indexed"], 1)
+        self.assertEqual(self.service.root_status(self.user, self.root_id)["indexed"], 1)
+
     def test_reconcile_failure_keeps_existing_rows(self):
         node = FakeNode("root-file", "/Photos", "root-etag")
         with self.service.lock, self.service.db:

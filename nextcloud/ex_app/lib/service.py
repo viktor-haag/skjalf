@@ -180,7 +180,7 @@ class SkjalfService:
         with self.lock:
             rows = self.db.execute(
                 "SELECT r.root_id,r.file_id,r.path,r.etag,r.available,j.status,j.total,j.processed,j.failed,j.message, "
-                "(SELECT COUNT(*) FROM files f WHERE f.user_id=r.user_id AND f.root_id=r.root_id AND f.status='indexed') indexed "
+                "(SELECT COUNT(*) FROM files f WHERE f.user_id=r.user_id AND f.root_id=r.root_id AND f.status='indexed') AS \"indexed\" "
                 "FROM roots r LEFT JOIN jobs j USING(user_id,root_id) WHERE r.user_id=? ORDER BY r.path",
                 (user_id,),
             ).fetchall()
@@ -292,7 +292,7 @@ class SkjalfService:
             if not root:
                 raise RootUnavailable("Der Ordner ist nicht mehr verfügbar.")
             counts = self.db.execute(
-                "SELECT COUNT(*) total,SUM(CASE WHEN status='indexed' THEN 1 ELSE 0 END) indexed," 
+                "SELECT COUNT(*) total,SUM(CASE WHEN status='indexed' THEN 1 ELSE 0 END) AS \"indexed\"," 
                 "SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed "
                 "FROM files WHERE user_id=? AND root_id=?", (user_id, root_id)
             ).fetchone()
