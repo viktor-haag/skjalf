@@ -1,0 +1,2 @@
+- bildanzeige nicht scrollbar
+- fortschrittsbalken wird nur upgedated, wenn man pausiert und fortsetzt
