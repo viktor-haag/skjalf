@@ -1,0 +1,54 @@
+name: skjalf
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    environment:
+      MARIADB_ROOT_PASSWORD: dev-root-password
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: dev-nextcloud-password
+    volumes:
+      - db:/var/lib/mysql
+
+  nextcloud:
+    image: nextcloud:34-apache
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: dev-nextcloud-password
+    volumes:
+      - nextcloud:/var/www/html
+      - ./appinfo/info.xml:/tmp/skjalf-info.xml:ro
+
+  skjalf:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - nextcloud
+    environment:
+      NEXTCLOUD_URL: http://nextcloud/index.php
+      APP_ID: skjalf
+      APP_VERSION: 0.1.0
+      APP_HOST: skjalf
+      APP_PORT: "23000"
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in nextcloud/.env}
+      AA_VERSION: ${AA_VERSION:?Set AA_VERSION to the installed AppAPI version}
+      APP_PERSISTENT_STORAGE: /app_data
+    expose:
+      - "23000"
+    volumes:
+      - appdata:/app_data
+
+volumes:
+  db:
+  nextcloud:
+  appdata:

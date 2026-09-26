@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<info>
+  <id>skjalf</id>
+  <name>Skjalf</name>
+  <summary>Private semantische Bildsuche</summary>
+  <description>Skjalf indiziert ausgewählte eigene Nextcloud-Ordner auf ausdrücklichen Start und findet Bilder mit einer Beschreibung.</description>
+  <version>0.1.0</version>
+  <licence>agpl</licence>
+  <author>Skjalf</author>
+  <category>tools</category>
+  <dependencies>
+    <nextcloud min-version="34" max-version="34" />
+  </dependencies>
+  <external-app>
+    <docker-install>
+      <registry>local</registry>
+      <image>skjalf</image>
+      <image-tag>dev</image-tag>
+    </docker-install>
+    <routes>
+      <route><url>^/?heartbeat$</url><verb>GET</verb><access_level>PUBLIC</access_level></route>
+      <route><url>^/?init$</url><verb>POST</verb><access_level>USER</access_level></route>
+      <route><url>^/?enabled$</url><verb>PUT</verb><access_level>USER</access_level></route>
+      <route><url>^/?$</url><verb>GET</verb><access_level>USER</access_level></route>
+      <route><url>^/?api/.*$</url><verb>GET</verb><access_level>USER</access_level></route>
+      <route><url>^/?api/.*$</url><verb>POST</verb><access_level>USER</access_level></route>
+      <route><url>^/?api/.*$</url><verb>DELETE</verb><access_level>USER</access_level></route>
+      <route><url>^/?js/.*$</url><verb>GET</verb><access_level>USER</access_level></route>
+      <route><url>^/?css/.*$</url><verb>GET</verb><access_level>USER</access_level></route>
+      <route><url>^/?img/.*$</url><verb>GET</verb><access_level>USER</access_level></route>
+    </routes>
+  </external-app>
+</info>
