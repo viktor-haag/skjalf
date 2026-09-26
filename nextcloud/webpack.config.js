@@ -9,6 +9,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'ex_app/js'),
     filename: '[name].js',
+    chunkFilename: '[name].js',
     // AppAPI serves the script from its proxy route; relative chunks keep the
     // browser on that same proxy prefix if a future view is split into chunks.
     publicPath: './',

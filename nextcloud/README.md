@@ -51,6 +51,8 @@ Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextclo
    docker compose exec -u www-data nextcloud php occ app_api:daemon:register skjalf-manual "Skjalf local" manual-install http skjalf http://nextcloud/index.php --net=skjalf_default
    ```
 
+   Für diese Compose-Umgebung wird `manual-install` verwendet: Compose startet den App-Container bereits selbst. Der GUI-Button „Verbindung prüfen“ kann trotzdem eine Docker-API-Prüfung wie `http://skjalf/v1.44/_ping` auslösen. Skjalf stellt keine Docker-API bereit und hört auf Port `23000`; dieser Test ist für den manuellen Daemon nicht geeignet. Auch eine Änderung des Daemon-Hosts auf `skjalf:23000` macht den Docker-API-Test nicht gültig. Maßgeblich sind ein erfolgreicher App-Heartbeat und die erfolgreiche Aktivierung mit Menüregistrierung. Unter `app_api:daemon:list` muss für `skjalf-manual` der Typ `manual-install` angezeigt werden. Hintergrund: [AppAPI-Verbindungsprüfung](https://github.com/nextcloud/app_api/blob/main/lib/Controller/DaemonConfigController.php).
+
 5. Vor dem Befehl den vollständigen Platzhalterwert `<APP_SECRET aus .env>` durch den Secret-Wert aus `.env` ersetzen. Der JSON-Text steht in einfachen Anführungszeichen; die Shell ersetzt den Platzhalter daher nicht automatisch. Das bereits laufende ExApp registrieren. Die `routes` unten sind die AppAPI-Zugriffsregeln aus `appinfo/info.xml`; `APP_HOST`, `APP_PORT`, `APP_ID` und `APP_SECRET` müssen exakt zur laufenden Compose-Umgebung passen.
 
    ```sh
@@ -59,6 +61,19 @@ Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextclo
    ```
 
 6. Öffne Skjalf über den Nextcloud-Menüeintrag. Wähle eigene Ordner aus, gleiche sie ab und starte die Indizierung ausdrücklich. Ein erneuter Abgleich aktualisiert Metadaten und markiert geänderte/neue Dateien als ausstehend; er indexiert sie nicht automatisch. Das Entfernen einer Ordnerauswahl löscht ausschließlich den zugehörigen Skjalf-Index.
+
+### Leere Seite beim Öffnen
+
+AppAPI stellt die eingebettete Oberfläche in `#content` bereit. Wenn ein älteres Bundle noch auf einer leeren Seite mountet, baue die Weboberfläche aus `nextcloud/` neu und ersetze nur den Skjalf-Container:
+
+```sh
+npm install --no-audit --no-fund
+npm run build
+docker compose build skjalf
+docker compose up -d --force-recreate skjalf
+```
+
+Lade die Nextcloud-Seite anschließend neu. Eine erneute AppAPI-Registrierung ist für diesen Frontend-Neubau nicht erforderlich.
 
 ## Bestehende Nextcloud-Installation
 
