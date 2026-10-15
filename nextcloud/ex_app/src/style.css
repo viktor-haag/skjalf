@@ -12,6 +12,8 @@
 body { margin: 0; background: var(--color-main-background, #f6f5fb); color: var(--skjalf-ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+/* AppAPI's embedded wrapper starts empty; let input pass through until Skjalf mounts. */
+#content:empty { pointer-events: none; }
 .skjalf-viewport {
   width: 100%;
   flex: 1 1 auto;
