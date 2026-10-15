@@ -31,6 +31,8 @@ https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 
 ## Installation & Usage
 
+For the Nextcloud app, see [setup and command-line updates](nextcloud/README.md#updates-einer-bestehenden-compose-installation).
+
 
 ### Prerequisites
 

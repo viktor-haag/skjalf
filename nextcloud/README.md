@@ -62,35 +62,33 @@ Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextclo
 
 6. Öffne Skjalf über den Nextcloud-Menüeintrag. Wähle eigene Ordner aus, gleiche sie ab und starte die Indizierung ausdrücklich. Ein erneuter Abgleich aktualisiert Metadaten und markiert geänderte/neue Dateien als ausstehend; er indexiert sie nicht automatisch. Das Entfernen einer Ordnerauswahl löscht ausschließlich den zugehörigen Skjalf-Index.
 
-### Leere Seite beim Öffnen
+## Updates einer bestehenden Compose-Installation
 
-AppAPI stellt die eingebettete Oberfläche in `#content` bereit. Wenn ein älteres Bundle noch auf einer leeren Seite mountet, baue die Weboberfläche aus `nextcloud/` neu und ersetze nur den Skjalf-Container:
-
-```sh
-npm install --no-audit --no-fund
-npm run build
-docker compose build skjalf
-docker compose up -d --force-recreate skjalf
-```
-
-Lade die Nextcloud-Seite anschließend neu. Eine erneute AppAPI-Registrierung ist für diesen Frontend-Neubau nicht erforderlich.
-
-### Wenn das Menü vorhanden ist, die Seite aber leer bleibt
-
-Wenn Browser-Konsole oder Netzwerkanzeige für `js/skjalf-main.js` oder `img/skjalf.svg` eine HTML-404-Antwort aus dem AppAPI-Proxy zeigen, fehlen wahrscheinlich die gespeicherten Proxy-Routen. Baue das App-Image neu und erstelle nur den Skjalf-Container neu:
+Führe das Update vom Repository-Root aus. Prüfe zuerst den Checkout. Nur wenn `git status --short` keine Änderungen zeigt, hole die neue Version mit Fast-Forward:
 
 ```sh
-docker compose up --build -d --force-recreate --no-deps skjalf
+git status --short
+git pull --ff-only
+cd nextcloud
+docker compose up -d --build --force-recreate --no-deps skjalf
 ```
 
-Aktualisiere anschließend die registrierten App-Metadaten aus der aktuellen XML-Datei. Kopiere sie an einen separaten Pfad im Nextcloud-Container: Ein bereits bestehender Datei-Bind-Mount kann nach dem Austausch der Hostdatei noch auf die alte Datei zeigen. Die Version `0.1.1` sorgt dafür, dass AppAPI die Metadatenaktualisierung nicht wegen gleicher Version überspringt.
+Der Dockerfile installiert die Frontend-Abhängigkeiten und baut die Weboberfläche automatisch im Image. Ein manuelles `npm install` oder `npm run build` im Repository ist dafür nicht nötig. Der Befehl baut und ersetzt nur den Skjalf-Container; die bestehende AppAPI-Registrierung und die persistenten Volumes bleiben erhalten. Für reine Codeänderungen musst du die App nicht deaktivieren oder erneut aktivieren. Lade danach die Nextcloud-Seite im Browser vollständig neu (Hard Reload).
+
+Wenn sich `appinfo/info.xml` oder die bei AppAPI registrierten Routen geändert haben, aktualisiere zusätzlich die Metadaten der bestehenden Registrierung. Falls AppAPI die Änderung wegen gleicher Version überspringen würde, erhöhe die Patchversion konsistent in `appinfo/info.xml`, `package.json`, dem `APP_VERSION` im Dockerfile und `APP_VERSION` in `docker-compose.yml`; baue dann Skjalf wie oben beschrieben neu. Kopiere anschließend die XML an einen separaten Pfad im Nextcloud-Container, damit ein eventuell veralteter Datei-Bind-Mount nicht verwendet wird, und rufe `app_api:app:update` auf:
 
 ```sh
 docker compose cp ./appinfo/info.xml nextcloud:/tmp/skjalf-info-update.xml
 docker compose exec -u www-data nextcloud php occ app_api:app:update skjalf --info-xml /tmp/skjalf-info-update.xml --wait-finish
 ```
 
-Lade danach die Nextcloud-Seite im Browser neu. Diese Folge aktualisiert die vorhandene Registrierung, ohne Skjalf abzumelden oder seine persistenten Daten-Volumes zu löschen.
+Das aktualisiert die vorhandene Registrierung; eine erneute `app_api:app:register`-Ausführung oder das Löschen von Volumes ist dafür nicht vorgesehen.
+
+### Leere Seite beim Öffnen
+
+Bei einer Codeänderung baue Skjalf wie im Abschnitt „Updates einer bestehenden Compose-Installation“ beschrieben neu. Der Dockerfile erstellt dabei auch das Frontend-Bundle; eine separate npm-Installation ist nicht erforderlich.
+
+Wenn Browser-Konsole oder Netzwerkanzeige für `js/skjalf-main.js` oder `img/skjalf.svg` eine HTML-404-Antwort aus dem AppAPI-Proxy zeigen, fehlen wahrscheinlich gespeicherte Proxy-Routen. Aktualisiere dann die AppAPI-Metadaten wie oben beschrieben. Eine reine Container-Neuerstellung aktualisiert vorhandene Proxy-Routen nicht.
 
 ## Bestehende Nextcloud-Installation
 
