@@ -113,7 +113,7 @@ Wenn `/heartbeat` erfolgreich ist, `/enabled?enabled=1` aber mit HTTP 500 scheit
 
 - Beim Öffnen oder Aktualisieren der Oberfläche gleicht Skjalf jeden ausgewählten Ordner vollständig über WebDAV ab. Ein fehlgeschlagener Scan wird nicht als Löschung interpretiert.
 - Die Indizierung verwendet einen Worker und verarbeitet pro Bild den Download, die ALIGN-Einbettung und den ETag-Abgleich. Nach einem App-Neustart werden laufende Jobs pausiert.
-- Die Suche liefert bis zu zehn Treffer und prüft vor jeder Anzeige erneut Dateiberechtigung, Ordnerzugehörigkeit und ETag. Vorschau und Dateilink werden vom angemeldeten Nextcloud-Browser geladen.
+- Die Trefferzahl ist je Suche einstellbar (Standard 10, höchstens 100); der Server validiert das Limit. Vor jeder Anzeige prüft Skjalf erneut Dateiberechtigung, Ordnerzugehörigkeit und ETag. Vorschau und Dateilink werden vom angemeldeten Nextcloud-Browser geladen.
 - Änderungen und neue Dateien werden erst nach einem ausdrücklichen Start indexiert. Fehlerhafte oder nicht unterstützte Bilder werden pro Datei vermerkt; ein Job läuft für weitere Bilder weiter.
 - Abhängigkeiten sind in `requirements.txt` und `package.json` gepinnt beziehungsweise begrenzt. Es wurde absichtlich kein Lockfile durch eine Paketinstallation erstellt. Die konkrete Abhängigkeitsauflösung und der AppAPI/Nextcloud-34-Laufzeitmix sind in dieser Arbeitsumgebung nicht verifiziert.
 

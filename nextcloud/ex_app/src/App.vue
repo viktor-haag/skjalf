@@ -75,7 +75,7 @@
       <div class="section-heading">
         <div>
           <h2>Bilder suchen</h2>
-          <p>Die Suche zeigt höchstens zehn aktuelle, weiterhin lesbare Treffer aus dem ausgewählten Ordner.</p>
+          <p>Die Suche zeigt bis zu {{ resultLimit }} aktuelle, weiterhin lesbare Treffer aus dem ausgewählten Ordner.</p>
         </div>
       </div>
       <form class="search-form" @submit.prevent="search">
@@ -89,6 +89,15 @@
         <label class="field query-field">
           <span>Beschreibung</span>
           <input v-model.trim="query" type="search" maxlength="500" placeholder="z. B. Hund im Schnee" autocomplete="off">
+        </label>
+        <label class="field result-limit-field">
+          <span>Treffer anzeigen</span>
+          <select v-model.number="resultLimit" :disabled="searching">
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
         </label>
         <button class="button primary search-button" type="submit" :disabled="searching || !selectedRoot || !query">
           {{ searching ? 'Suche läuft …' : 'Suchen' }}
@@ -160,7 +169,7 @@ export default {
   data() {
     return {
       roots: [], folders: [], folderPath: '', showBrowser: false,
-      selectedRoot: '', query: '', results: [], searched: false,
+      selectedRoot: '', query: '', resultLimit: 10, results: [], searched: false,
       busy: false, searching: false, error: '', notice: '',
       rootActionBusy: {}, statusTimer: null, statusPollPending: false,
       rootsRevision: 0, rootsRefreshPending: false, componentDisposed: false,
@@ -335,7 +344,10 @@ export default {
       this.results = []
       this.error = ''
       try {
-        const data = await this.request('post', `/api/roots/${encodeURIComponent(this.selectedRoot)}/search`, { query: this.query })
+        const data = await this.request(
+          'post', `/api/roots/${encodeURIComponent(this.selectedRoot)}/search`,
+          { query: this.query, limit: this.resultLimit }
+        )
         this.results = data.results || []
       } catch (error) {
         this.error = error.message

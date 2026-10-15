@@ -48,6 +48,7 @@ class RootBody(StrictBody):
 
 class SearchBody(StrictBody):
     query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=10, ge=1, le=100)
 
 
 @APP.exception_handler(RootUnavailable)
@@ -170,7 +171,7 @@ async def pause_index(root_id: str, nc: Any = Depends(anc_app)) -> dict[str, Any
 
 @APP.post("/api/roots/{root_id}/search")
 async def search(root_id: str, body: SearchBody, nc: Any = Depends(anc_app)) -> dict[str, Any]:
-    return {"results": await service.search(nc, root_id, body.query)}
+    return {"results": await service.search(nc, root_id, body.query, body.limit)}
 
 
 @APP.get("/api/status")

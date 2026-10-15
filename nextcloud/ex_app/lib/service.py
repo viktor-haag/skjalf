@@ -584,9 +584,13 @@ class SkjalfService:
                 )
             self._advance_job(user_id, root_id, failed=False)
 
-    async def search(self, nc: Any, root_id: str, query: str) -> list[dict[str, Any]]:
+    async def search(
+        self, nc: Any, root_id: str, query: str, result_limit: int = 10
+    ) -> list[dict[str, Any]]:
         self._require_enabled()
         user_id = await self.user_id(nc)
+        if not isinstance(result_limit, int) or isinstance(result_limit, bool) or not 1 <= result_limit <= 100:
+            raise ValueError("Die Trefferzahl muss zwischen 1 und 100 liegen.")
         if not query.strip():
             return []
         root = self._get_root(user_id, root_id)
@@ -616,13 +620,13 @@ class SkjalfService:
         count = await self._vector_call(collection.count)
         if not count:
             return []
-        limit = min(count, 64)
+        candidate_limit = min(count, max(64, result_limit))
         valid: list[dict[str, Any]] = []
         checked: set[str] = set()
-        while limit:
+        while candidate_limit:
             response = await self._vector_call(
                 collection.query,
-                query_embeddings=[text_vector.tolist()], n_results=limit,
+                query_embeddings=[text_vector.tolist()], n_results=candidate_limit,
                 include=["metadatas", "distances"],
             )
             ids = response.get("ids", [[]])[0]
@@ -662,16 +666,16 @@ class SkjalfService:
                     "name": current.user_path.rsplit("/", 1)[-1],
                     "score": 1.0 - float(distance), "etag": str(current.etag),
                 })
-                if len(valid) >= 10:
+                if len(valid) >= result_limit:
                     break
-            if len(valid) >= 10 or limit >= count:
+            if len(valid) >= result_limit or candidate_limit >= count:
                 break
-            limit = min(count, limit * 2)
+            candidate_limit = min(count, candidate_limit * 2)
         with self.lock:
             still_available = self.db.execute(
                 "SELECT available FROM roots WHERE user_id=? AND root_id=?", (user_id, root_id)
             ).fetchone()
-        return valid[:10] if still_available and still_available["available"] else []
+        return valid[:result_limit] if still_available and still_available["available"] else []
 
     def _mark_changed(self, user_id: str, root_id: str, file_id: str, etag: str, path: str) -> None:
         with self.lock, self.db:

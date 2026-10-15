@@ -14,6 +14,7 @@ button, input, select { font: inherit; }
 button { cursor: pointer; }
 .skjalf-viewport {
   width: 100%;
+  max-width: 100%;
   flex: 1 1 auto;
   height: 100%;
   max-height: calc(100vh - var(--header-height, 50px) - 16px);
@@ -25,9 +26,16 @@ button { cursor: pointer; }
 }
 #skjalf-root.skjalf-host,
 #content.skjalf-host,
-#content-vue.skjalf-host { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+#content-vue.skjalf-host {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
 .skjalf-viewport > .skjalf { min-height: 100%; }
-.skjalf { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0 48px; }
+.skjalf { width: 100%; max-width: 1080px; min-width: 0; margin: 0 auto; padding: 36px 16px 48px; }
 .hero { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 8px 4px 28px; }
 .hero h1 { margin: 0; font-size: clamp(2.3rem, 5vw, 3.5rem); letter-spacing: -.05em; line-height: 1.1; }
 .eyebrow { color: var(--skjalf-accent); font-size: .72rem; font-weight: 800; letter-spacing: .16em; margin: 0 0 6px; }
@@ -49,11 +57,12 @@ h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
 .notice.error { background: #ffe7e8; color: #76161f; }
 .notice.success { background: #e7f7ec; color: #174c2a; }
 .browser { margin: 20px 0 4px; padding: 16px; border: 1px solid var(--skjalf-border); border-radius: 12px; background: var(--skjalf-subtle); }
-.browser-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 8px; }
-.current-path { color: var(--skjalf-muted); font-size: .9rem; overflow-wrap: anywhere; }
+.browser-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; min-width: 0; margin-bottom: 8px; }
+.current-path { flex: 1 1 12rem; min-width: 0; color: var(--skjalf-muted); font-size: .9rem; overflow-wrap: anywhere; }
 .folder-list { list-style: none; margin: 8px 0 0; padding: 0; }
-.folder-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 2px; border-top: 1px solid var(--skjalf-border); }
-.folder-name { display: flex; align-items: center; gap: 12px; min-width: 0; text-align: left; color: var(--skjalf-ink); border: 0; background: transparent; overflow-wrap: anywhere; }
+.folder-list li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; padding: 9px 2px; border-top: 1px solid var(--skjalf-border); }
+.folder-list li > .button { max-width: 100%; white-space: normal; }
+.folder-name { display: flex; flex: 1 1 12rem; align-items: center; gap: 12px; min-width: 0; text-align: left; color: var(--skjalf-ink); border: 0; background: transparent; overflow-wrap: anywhere; }
 .folder-icon { color: var(--skjalf-accent); font-size: 1.2rem; }
 .root-list { margin-top: 20px; }
 .root-card { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 17px 0; border-top: 1px solid var(--skjalf-border); }
@@ -64,14 +73,15 @@ h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
 .progress-row progress { width: min(300px, 45vw); height: 8px; accent-color: var(--skjalf-accent); }
 .empty { color: var(--skjalf-muted); margin: 22px 0 4px; }
 .search-panel { padding-bottom: 26px; }
-.search-form { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(240px, 1.8fr) auto; gap: 12px; align-items: end; margin-top: 18px; }
-.field { display: flex; flex-direction: column; gap: 6px; font-weight: 650; font-size: .9rem; }
-.field input, .field select { width: 100%; min-height: 42px; border: 1px solid var(--skjalf-border); border-radius: 8px; background: var(--skjalf-surface); color: var(--skjalf-ink); padding: 8px 10px; }
+.search-form { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.8fr) minmax(112px, .55fr) auto; gap: 12px; align-items: end; min-width: 0; margin-top: 18px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-weight: 650; font-size: .9rem; }
+.field input, .field select { width: 100%; max-width: 100%; min-width: 0; min-height: 42px; border: 1px solid var(--skjalf-border); border-radius: 8px; background: var(--skjalf-surface); color: var(--skjalf-ink); padding: 8px 10px; }
 .results {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
   gap: 14px;
   margin-top: 20px;
+  min-width: 0;
   max-height: 68vh;
   max-height: min(68dvh, 720px);
   overflow-y: auto;
@@ -86,17 +96,27 @@ h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
 .result-text span { color: var(--skjalf-muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 footer { color: var(--skjalf-muted); text-align: center; font-size: .85rem; padding-top: 6px; }
 
+@media (max-width: 900px) {
+  .search-form { grid-template-columns: minmax(0, 1fr) minmax(130px, .55fr); }
+  .result-limit-field { grid-column: 2; grid-row: 1; }
+  .query-field { grid-column: 1 / -1; grid-row: 2; }
+  .search-button { grid-column: 1 / -1; grid-row: 3; }
+}
+
 @media (max-width: 720px) {
-  .skjalf { width: min(100% - 22px, 1080px); padding-top: 20px; }
+  .skjalf { padding: 20px 11px 36px; }
   .hero, .section-heading { align-items: flex-start; flex-direction: column; }
   .hero { gap: 15px; }
   .root-card { align-items: flex-start; flex-direction: column; }
   .root-actions { justify-content: flex-start; }
-  .search-form { grid-template-columns: 1fr; }
+  .search-form { grid-template-columns: minmax(0, 1fr); }
+  .search-form > * { grid-column: auto; grid-row: auto; }
   .search-button { width: 100%; }
+  .folder-list li { align-items: stretch; flex-direction: column; }
+  .folder-list li > .button { width: 100%; }
   .panel { padding: 18px; }
   .results {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
     max-height: 60vh;
     max-height: min(60dvh, 520px);
   }
