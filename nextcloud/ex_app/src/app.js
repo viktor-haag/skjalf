@@ -4,11 +4,15 @@ import './style.css'
 
 Vue.config.productionTip = false
 
-const mountHost = document.getElementById('content') || document.getElementById('content-vue')
+const appApiContent = document.querySelector('#content > #content')
+const mountHost = appApiContent || document.getElementById('content-vue') || document.getElementById('content')
 if (!mountHost) {
   throw new Error('Skjalf embedded page did not provide #content or #content-vue.')
 }
 
+if (appApiContent) {
+  mountHost.id = 'skjalf-root'
+}
 mountHost.classList.add('skjalf-host')
 const viewport = document.createElement('div')
 viewport.className = 'skjalf-viewport'

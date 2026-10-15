@@ -12,7 +12,9 @@ __webpack_public_path__ = generateUrl('/apps/app_api/proxy/skjalf/js/')
 
 import(/* webpackChunkName: "skjalf-app" */ './app').catch((error) => {
   console.error('Skjalf could not load its interface.', error)
-  const target = document.getElementById('content') || document.getElementById('content-vue')
+  const target = document.querySelector('#content > #content')
+    || document.getElementById('content-vue')
+    || document.getElementById('content')
   if (target) {
     const message = document.createElement('p')
     message.className = 'skjalf-load-error'
