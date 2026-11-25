@@ -51,8 +51,9 @@ WebGPU (Windows/Linux/macOS, needs a WebGPU-capable GPU driver) in one of two wa
   putting that directory first on `PYTHONPATH`:
 
   ```bash
-  pip install --no-deps --target "$LOCALAPPDATA/Temp/skjalf-ort-webgpu" onnxruntime-webgpu
-  export PYTHONPATH="$LOCALAPPDATA/Temp/skjalf-ort-webgpu"
+  ORT_WEBGPU_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/skjalf-ort-webgpu"
+  pip install --no-deps --target "$ORT_WEBGPU_DIR" onnxruntime-webgpu
+  export PYTHONPATH="$ORT_WEBGPU_DIR${PYTHONPATH:+:$PYTHONPATH}"
   ```
 
 ## Usage
