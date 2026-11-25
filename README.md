@@ -78,7 +78,7 @@ skjalf
 
 The `nextcloud/` folder contains Skjalf as a Nextcloud External App (Nextcloud 34, AppAPI). It runs as its own Docker container, reads photos only through the signed-in user's Nextcloud access, and keeps its index in the app's own storage. Your original files stay in Nextcloud.
 
-The full guide is in German: [nextcloud/README.md](nextcloud/README.md). It covers a local test setup with Docker Compose, installing into an existing Nextcloud, [updating](nextcloud/README.md#updates-einer-bestehenden-compose-installation) and troubleshooting.
+The full guide is in [nextcloud/README.md](nextcloud/README.md). It covers a local test setup with Docker Compose, installing into an existing Nextcloud, [updating](nextcloud/README.md#updating-an-existing-compose-installation) and troubleshooting.
 
 ## Roadmap
 

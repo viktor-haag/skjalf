@@ -1,70 +1,70 @@
-# Skjalf für Nextcloud 34
+# Skjalf for Nextcloud 34
 
-Skjalf ist eine Nextcloud External App für private semantische Bildsuche. Die App verwendet CPU ALIGN (`kakaobrain/align-base`), speichert Chroma-Vektoren mit Kosinus-Abstand und hält Ordner-, Datei- und Jobstatus in SQLite. SQLite, Modellcache und Vektordaten liegen unter `APP_PERSISTENT_STORAGE`; Originaldateien bleiben in Nextcloud.
+Skjalf is a Nextcloud External App for private semantic image search. The app uses ALIGN on the CPU (`kakaobrain/align-base`), stores Chroma vectors with cosine distance and keeps folder, file and job state in SQLite. SQLite, the model cache and the vector data live under `APP_PERSISTENT_STORAGE`; original files stay in Nextcloud.
 
-Die App liest Dateien ausschließlich über den pro Anfrage authentifizierten AppAPI-Kontext und Nextcloud WebDAV. Es gibt keine Mounts auf das Nextcloud-Datenverzeichnis. AppAPI-Nutzer wird aus dem verifizierten Request-Kontext gelesen, niemals aus einem API-Parameter. Freigaben, externe Speicher, Papierkorb und nicht lesbare Ordner werden ausgeschlossen. Jede Indexierung ist manuell: Abgleich, neue oder geänderte Datei, Pausieren und Fortsetzen lösen selbst keine Indexierung aus.
+The app reads files only through the per-request authenticated AppAPI context and Nextcloud WebDAV. There are no mounts of the Nextcloud data directory. The AppAPI user is read from the verified request context, never from an API parameter. Shares, external storage, the trash bin and unreadable folders are excluded. All indexing is manual: syncing, new or changed files, pausing and resuming never start indexing on their own.
 
-## Lokale Entwicklungsumgebung mit Nextcloud 34
+## Local development setup with Nextcloud 34
 
-Diese Compose-Umgebung ist ein separates Testsystem mit eigener MariaDB, Nextcloud-Datenbank und Skjalf-Datenvolume. Sie verändert keine bestehende Nextcloud-Installation.
+This Compose setup is a separate test system with its own MariaDB, Nextcloud database and Skjalf data volume. It does not touch any existing Nextcloud installation.
 
-1. Docker Compose starten und `nextcloud/` als Arbeitsordner verwenden. `.env.example` als `.env` übernehmen und `APP_SECRET` durch einen langen zufälligen Wert ersetzen. Lass den `AA_VERSION`-Platzhalter zunächst stehen; er wird erst gebraucht, wenn Skjalf gestartet wird.
-2. Zuerst nur Datenbank und Nextcloud starten:
+1. Use `nextcloud/` as your working directory for Docker Compose. Copy `.env.example` to `.env` and replace `APP_SECRET` with a long random value. Leave the `AA_VERSION` placeholder as it is for now; it is only needed once Skjalf starts.
+2. Start only the database and Nextcloud first:
 
    ```sh
    docker compose up -d db nextcloud
    ```
 
-   Richte Nextcloud danach unter `http://localhost:8080` im Browser ein. Der Compose-Stack setzt kein Nextcloud-Admin-Konto; Benutzername und Passwort legst du im Einrichtungsdialog fest.
+   Then set up Nextcloud in your browser at `http://localhost:8080`. The Compose stack does not create a Nextcloud admin account; you choose the username and password in the setup dialog.
 
-   Erlaube anschließend auch den internen Docker-Hostnamen `nextcloud`, über den Skjalf die Nextcloud-API aufruft. Prüfe zuerst die vorhandenen Einträge:
+   Next, also allow the internal Docker hostname `nextcloud`, which Skjalf uses to call the Nextcloud API. Check the existing entries first:
 
    ```sh
    docker compose exec -u www-data nextcloud php occ config:system:get trusted_domains
    ```
 
-   Bei einer frischen Einrichtung mit nur einem Eintrag ist Index `1` frei:
+   On a fresh setup with only one entry, index `1` is free:
 
    ```sh
    docker compose exec -u www-data nextcloud php occ config:system:set trusted_domains 1 --value=nextcloud
    ```
 
-   Falls bereits mehrere Einträge vorhanden sind, verwende stattdessen einen freien Index, ohne einen vorhandenen Hostnamen zu ersetzen. Die Browseradresse und der interne Hostname müssen beide erlaubt bleiben. Das Setzen von `NEXTCLOUD_TRUSTED_DOMAINS` im Compose-Environment allein behebt eine bereits im Browser eingerichtete Installation nicht zuverlässig.
+   If there are already several entries, use a free index instead, without replacing an existing hostname. Both the browser address and the internal hostname must stay allowed. Setting `NEXTCLOUD_TRUSTED_DOMAINS` in the Compose environment alone does not reliably fix an installation that was already set up in the browser.
 
-3. Prüfe AppAPI in Nextcloud. Nextcloud ab Version 30.0.1 installiert AppAPI standardmäßig automatisch. Wenn `app_api` in der App-Verwaltung vorhanden, aber deaktiviert ist, aktiviere es; installiere AppAPI dort nur, wenn es tatsächlich fehlt. Lies anschließend die installierte AppAPI-Version aus:
+3. Check AppAPI in Nextcloud. Nextcloud 30.0.1 and later installs AppAPI automatically by default. If `app_api` is present in the app management but disabled, enable it; only install AppAPI there if it is actually missing. Then read the installed AppAPI version:
 
    ```sh
    docker compose exec -u www-data nextcloud php occ app:list
    ```
 
-   Trage die angezeigte Version von `app_api` in `.env` als `AA_VERSION` ein. Starte Skjalf nicht, solange dort noch der Beispiel-Platzhalter steht.
+   Enter the listed version of `app_api` in `.env` as `AA_VERSION`. Don't start Skjalf while the example placeholder is still there.
 
-4. Baue und starte nun nur den Skjalf-Dienst:
+4. Now build and start only the Skjalf service:
 
    ```sh
    docker compose up --build -d skjalf
    ```
 
-   Skjalf läuft im selben Docker-Netzwerk `skjalf_default`. Als Nextcloud-Administrator registriere danach die manuelle Daemon-Konfiguration:
+   Skjalf runs in the same Docker network, `skjalf_default`. As a Nextcloud administrator, then register the manual daemon configuration:
 
    ```sh
    docker compose exec -u www-data nextcloud php occ app_api:daemon:register skjalf-manual "Skjalf local" manual-install http skjalf http://nextcloud/index.php --net=skjalf_default
    ```
 
-   Für diese Compose-Umgebung wird `manual-install` verwendet: Compose startet den App-Container bereits selbst. Der GUI-Button „Verbindung prüfen“ kann trotzdem eine Docker-API-Prüfung wie `http://skjalf/v1.44/_ping` auslösen. Skjalf stellt keine Docker-API bereit und hört auf Port `23000`; dieser Test ist für den manuellen Daemon nicht geeignet. Auch eine Änderung des Daemon-Hosts auf `skjalf:23000` macht den Docker-API-Test nicht gültig. Maßgeblich sind ein erfolgreicher App-Heartbeat und die erfolgreiche Aktivierung mit Menüregistrierung. Unter `app_api:daemon:list` muss für `skjalf-manual` der Typ `manual-install` angezeigt werden. Hintergrund: [AppAPI-Verbindungsprüfung](https://github.com/nextcloud/app_api/blob/main/lib/Controller/DaemonConfigController.php).
+   This Compose setup uses `manual-install` because Compose already starts the app container itself. The "Check connection" button in the GUI may still trigger a Docker API check such as `http://skjalf/v1.44/_ping`. Skjalf does not provide a Docker API and listens on port `23000`, so this check does not apply to the manual daemon. Changing the daemon host to `skjalf:23000` does not make the Docker API check valid either. What counts is a successful app heartbeat and a successful enable step with menu registration. `app_api:daemon:list` must show the type `manual-install` for `skjalf-manual`. Background: [AppAPI connection check](https://github.com/nextcloud/app_api/blob/main/lib/Controller/DaemonConfigController.php).
 
-5. Das bereits laufende ExApp registrieren. Führe den Befehl im Ordner `nextcloud/` aus: Er liest `APP_SECRET` aus `.env` und setzt den Wert in den JSON-Text ein. Der JSON-Text steht in einfachen Anführungszeichen; nur die Secret-Stelle wird dafür kurz verlassen. Die `routes` unten sind die AppAPI-Zugriffsregeln aus `appinfo/info.xml`; `APP_HOST`, `APP_PORT`, `APP_ID` und `APP_SECRET` müssen exakt zur laufenden Compose-Umgebung passen.
+5. Register the already running ExApp. Run the command from the `nextcloud/` folder: it reads `APP_SECRET` from `.env` and inserts the value into the JSON text. The JSON text is in single quotes; only the secret part briefly leaves them. The `routes` below are the AppAPI access rules from `appinfo/info.xml`; `APP_HOST`, `APP_PORT`, `APP_ID` and `APP_SECRET` must exactly match the running Compose setup.
 
    ```sh
    docker compose exec -u www-data nextcloud php occ app_api:app:register skjalf skjalf-manual --json-info '{"id":"skjalf","name":"Skjalf","daemon_config_name":"skjalf-manual","version":"0.1.1","secret":"'"$(. ./.env && printf %s "$APP_SECRET")"'","host":"skjalf","protocol":"http","port":23000,"external-app":{"routes":[{"url":"^/?heartbeat$","verb":"GET","access_level":"PUBLIC"},{"url":"^/?init$","verb":"POST","access_level":"USER"},{"url":"^/?enabled$","verb":"PUT","access_level":"USER"},{"url":"^/?$","verb":"GET","access_level":"USER"},{"url":"^/?api/.*$","verb":"GET,POST,DELETE","access_level":"USER"},{"url":"^/?js/.*$","verb":"GET","access_level":"USER"},{"url":"^/?css/.*$","verb":"GET","access_level":"USER"},{"url":"^/?img/.*$","verb":"GET","access_level":"USER"}]}}' --wait-finish
    docker compose exec -u www-data nextcloud php occ app_api:app:enable skjalf
    ```
 
-6. Öffne Skjalf über den Nextcloud-Menüeintrag. Wähle eigene Ordner aus, gleiche sie ab und starte die Indizierung ausdrücklich. Ein erneuter Abgleich aktualisiert Metadaten und markiert geänderte/neue Dateien als ausstehend; er indexiert sie nicht automatisch. Das Entfernen einer Ordnerauswahl löscht ausschließlich den zugehörigen Skjalf-Index.
+6. Open Skjalf from the Nextcloud menu entry. Choose your own folders, sync them and start indexing explicitly. Syncing again updates the metadata and marks changed or new files as pending; it does not index them automatically. Removing a folder selection deletes only the matching Skjalf index.
 
-## Updates einer bestehenden Compose-Installation
+## Updating an existing Compose installation
 
-Führe das Update vom Repository-Root aus. Prüfe zuerst den Checkout. Nur wenn `git status --short` keine Änderungen zeigt, hole die neue Version mit Fast-Forward:
+Run the update from the repository root. Check the checkout first. Only if `git status --short` shows no changes, fetch the new version with a fast-forward:
 
 ```sh
 git status --short
@@ -73,20 +73,20 @@ cd nextcloud
 docker compose up -d --build --force-recreate --no-deps skjalf
 ```
 
-Der Dockerfile installiert die Frontend-Abhängigkeiten und baut die Weboberfläche automatisch im Image. Ein manuelles `npm install` oder `npm run build` im Repository ist dafür nicht nötig. Der Befehl baut und ersetzt nur den Skjalf-Container; die bestehende AppAPI-Registrierung und die persistenten Volumes bleiben erhalten. Für reine Codeänderungen musst du die App nicht deaktivieren oder erneut aktivieren. Lade danach die Nextcloud-Seite im Browser vollständig neu (Hard Reload).
+The Dockerfile installs the frontend dependencies and builds the web interface automatically inside the image. You don't need to run `npm install` or `npm run build` in the repository for this. The command only rebuilds and replaces the Skjalf container; the existing AppAPI registration and the persistent volumes are kept. For code-only changes you don't need to disable and re-enable the app. Afterwards, fully reload the Nextcloud page in your browser (hard reload).
 
-Wenn sich `appinfo/info.xml` oder die bei AppAPI registrierten Routen geändert haben, aktualisiere zusätzlich die Metadaten der bestehenden Registrierung. Falls AppAPI die Änderung wegen gleicher Version überspringen würde, erhöhe die Patchversion konsistent in `appinfo/info.xml`, `package.json`, dem `APP_VERSION` im Dockerfile und `APP_VERSION` in `docker-compose.yml`; baue dann Skjalf wie oben beschrieben neu. Kopiere anschließend die XML an einen separaten Pfad im Nextcloud-Container, damit ein eventuell veralteter Datei-Bind-Mount nicht verwendet wird, und rufe `app_api:app:update` auf:
+If `appinfo/info.xml` or the routes registered with AppAPI have changed, also update the metadata of the existing registration. If AppAPI would skip the change because the version is the same, bump the patch version consistently in `appinfo/info.xml`, `package.json`, `APP_VERSION` in the Dockerfile and `APP_VERSION` in `docker-compose.yml`; then rebuild Skjalf as described above. Next, copy the XML to a separate path in the Nextcloud container, so that a possibly stale file bind mount isn't used, and call `app_api:app:update`:
 
 ```sh
 docker compose cp ./appinfo/info.xml nextcloud:/tmp/skjalf-info-update.xml
 docker compose exec -u www-data nextcloud php occ app_api:app:update skjalf --info-xml /tmp/skjalf-info-update.xml --wait-finish
 ```
 
-Das aktualisiert die vorhandene Registrierung; eine erneute `app_api:app:register`-Ausführung oder das Löschen von Volumes ist dafür nicht vorgesehen.
+This updates the existing registration; running `app_api:app:register` again or deleting volumes is not intended for this.
 
-## Bestehende Nextcloud-Installation
+## Existing Nextcloud installation
 
-Installiere oder initialisiere Nextcloud nicht neu. Installiere AppAPI in der vorhandenen Instanz und registriere einen `manual-install`-Daemon, der das bereits laufende Skjalf-Containerziel und Nextcloud über ihre jeweiligen internen Netzwerkadressen erreichen kann. Baue das lokale CPU-Image mit `docker build -t skjalf:dev -f nextcloud/Dockerfile nextcloud` und starte es in einem Docker-Netzwerk, das den AppAPI-Dienst erreicht. Beispiel für den Container (Werte für dein Netzwerk und deine URL anpassen):
+Don't reinstall or reinitialize Nextcloud. Install AppAPI in the existing instance and register a `manual-install` daemon that can reach the already running Skjalf container and Nextcloud through their respective internal network addresses. Build the local CPU image with `docker build -t skjalf:dev -f nextcloud/Dockerfile nextcloud` and start it in a Docker network that can reach the AppAPI service. Example for the container (adjust the values for your network and URL):
 
 ```sh
 docker run -d --name skjalf --restart unless-stopped --network "${NEXTCLOUD_NETWORK}" --network-alias skjalf \
@@ -97,36 +97,36 @@ docker run -d --name skjalf --restart unless-stopped --network "${NEXTCLOUD_NETW
   skjalf:dev
 ```
 
-Setze `NEXTCLOUD_NETWORK`, `APP_SECRET`, `AA_VERSION` und `NEXTCLOUD_URL` in deiner Shell auf die eigenen Werte. `NEXTCLOUD_URL` muss aus dem Container erreichbar sein. Registriere den Daemon so, dass Nextcloud den App-Host `skjalf` erreichen kann. Setze im JSON-Befehl aus Schritt 5 den Secret-Wert aus `$APP_SECRET` ein (bei gesetzter Shell-Variable genügt `"secret":"'"$APP_SECRET"'"`). Bei einem anders benannten Container muss `APP_HOST` in `docker run`, dem Daemon-Netzwerk und der JSON-Registrierung konsistent geändert werden. `APP_PORT` bleibt in allen drei Stellen `23000`, solange du keinen anderen Port konfigurierst. Die App benötigt nur ihr eigenes persistentes Volume; mounte weder das Nextcloud-Datenverzeichnis noch persönliche Dateien in den Container.
+Set `NEXTCLOUD_NETWORK`, `APP_SECRET`, `AA_VERSION` and `NEXTCLOUD_URL` in your shell to your own values. `NEXTCLOUD_URL` must be reachable from the container. Register the daemon so that Nextcloud can reach the app host `skjalf`. In the JSON command from step 5, insert the secret from `$APP_SECRET` (if the shell variable is set, `"secret":"'"$APP_SECRET"'"` is enough). If you name the container differently, change `APP_HOST` consistently in `docker run`, the daemon network and the JSON registration. `APP_PORT` stays `23000` in all three places unless you configure a different port. The app only needs its own persistent volume; don't mount the Nextcloud data directory or personal files into the container.
 
-## Ablauf und Grenzen
+## How it works and limits
 
-- Beim Öffnen oder Aktualisieren der Oberfläche gleicht Skjalf jeden ausgewählten Ordner vollständig über WebDAV ab. Ein fehlgeschlagener Scan wird nicht als Löschung interpretiert.
-- Die Indizierung verwendet einen Worker und verarbeitet pro Bild den Download, die ALIGN-Einbettung und den ETag-Abgleich. Nach einem App-Neustart werden laufende Jobs pausiert.
-- Die Trefferzahl ist je Suche einstellbar (Standard 10, höchstens 100); der Server validiert das Limit. Vor jeder Anzeige prüft Skjalf erneut Dateiberechtigung, Ordnerzugehörigkeit und ETag. Vorschau und Dateilink werden vom angemeldeten Nextcloud-Browser geladen.
-- Änderungen und neue Dateien werden erst nach einem ausdrücklichen Start indexiert. Fehlerhafte oder nicht unterstützte Bilder werden pro Datei vermerkt; ein Job läuft für weitere Bilder weiter.
-- Abhängigkeiten sind in `requirements.txt` und `package.json` gepinnt beziehungsweise begrenzt; es gibt bewusst kein npm-Lockfile.
-- Unterstützt wird ausschließlich Nextcloud 34 (siehe `appinfo/info.xml`).
+- When the interface is opened or refreshed, Skjalf fully syncs every selected folder over WebDAV. A failed scan is never treated as a deletion.
+- Indexing uses a single worker and, for each image, handles the download, the ALIGN embedding and the ETag check. After an app restart, running jobs are paused.
+- The number of results can be set per search (default 10, at most 100); the server validates the limit. Before showing a result, Skjalf checks file permission, folder membership and ETag again. Previews and file links are loaded by the signed-in Nextcloud browser session.
+- Changes and new files are only indexed after an explicit start. Broken or unsupported images are recorded per file; the job carries on with the remaining images.
+- Dependencies are pinned or bounded in `requirements.txt` and `package.json`; there is intentionally no npm lockfile.
+- Only Nextcloud 34 is supported (see `appinfo/info.xml`).
 
-## Fehlerbehebung
+## Troubleshooting
 
-### Leere Seite beim Öffnen
+### Blank page when opening the app
 
-Bei einer Codeänderung baue Skjalf wie im Abschnitt „Updates einer bestehenden Compose-Installation“ beschrieben neu. Der Dockerfile erstellt dabei auch das Frontend-Bundle; eine separate npm-Installation ist nicht erforderlich.
+After a code change, rebuild Skjalf as described in "Updating an existing Compose installation". The Dockerfile also builds the frontend bundle; a separate npm install is not required.
 
-Wenn Browser-Konsole oder Netzwerkanzeige für `js/skjalf-main.js` oder `img/skjalf.svg` eine HTML-404-Antwort aus dem AppAPI-Proxy zeigen, fehlen wahrscheinlich gespeicherte Proxy-Routen. Aktualisiere dann die AppAPI-Metadaten wie oben beschrieben. Eine reine Container-Neuerstellung aktualisiert vorhandene Proxy-Routen nicht.
+If the browser console or network panel shows an HTML 404 response from the AppAPI proxy for `js/skjalf-main.js` or `img/skjalf.svg`, stored proxy routes are probably missing. Update the AppAPI metadata as described above. Recreating the container alone does not update existing proxy routes.
 
-### HTTP 400 beim Aktivieren
+### HTTP 400 when enabling the app
 
-Wenn `/heartbeat` erfolgreich ist, `/enabled?enabled=1` aber mit HTTP 500 scheitert und der Traceback einen HTTP 400 bei `GET /ocs/v1.php/cloud/capabilities` enthält, prüfe zuerst die Nextcloud-`trusted_domains`. Für diesen Compose-Stack muss der interne Hostname `nextcloud` zugelassen sein; siehe Einrichtung oben. Der HTTP-400-Code allein beweist die Ursache nicht: Falls der Fehler danach bestehen bleibt, sind die Nextcloud-Logs bzw. die Antwort auf diesen API-Aufruf zur weiteren Diagnose erforderlich. Nach der Korrektur Skjalf in der Nextcloud-App-Verwaltung deaktivieren und erneut aktivieren, damit die Menüregistrierung wiederholt wird. Ein erneuter Frontend- oder Container-Build ist dafür nicht nötig.
+If `/heartbeat` succeeds but `/enabled?enabled=1` fails with HTTP 500 and the traceback contains an HTTP 400 for `GET /ocs/v1.php/cloud/capabilities`, check the Nextcloud `trusted_domains` first. For this Compose stack, the internal hostname `nextcloud` must be allowed; see the setup above. The HTTP 400 code alone does not prove the cause: if the error persists afterwards, you need the Nextcloud logs or the response to that API call to diagnose it further. After fixing it, disable and re-enable Skjalf in the Nextcloud app management so the menu registration runs again. A new frontend or container build is not needed for this.
 
-## Prüfung
+## Testing
 
-Die Unit-Tests unter `tests/` laufen offline mit Stellvertretern für Nextcloud, ALIGN-Modell und Chroma. Im Ordner `nextcloud/`:
+The unit tests in `tests/` run offline with stand-ins for Nextcloud, the ALIGN model and Chroma. From the `nextcloud/` folder:
 
 ```sh
 pip install "nc-py-api>=0.30,<0.31" "fastapi>=0.115,<1" "pillow>=10,<13" numpy
 python -m unittest tests/test_service.py
 ```
 
-Das Frontend lässt sich lokal mit `npm install && npm run build` bauen; die Ausgabe in `ex_app/js/` wird nicht eingecheckt. Docker Compose, Containerstart, AppAPI-Registrierung, Nextcloud-WebDAV, Browser-UI und ALIGN-Modelldownload werden nach der Installation anhand von [ACCEPTANCE.md](ACCEPTANCE.md) manuell geprüft.
+You can build the frontend locally with `npm install && npm run build`; the output in `ex_app/js/` is not committed. Docker Compose, container start, AppAPI registration, Nextcloud WebDAV, the browser UI and the ALIGN model download are not covered by the unit tests and need to be checked manually after installation.
