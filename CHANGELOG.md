@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-11-25)
+
+### Code Style
+
+- Colored available-updates-msg
+  ([`8061204`](https://github.com/viktor-haag/skjalf/commit/8061204c53dfb5777fdc8d25ff9e6a1ef6ee5da1))
+
+### Continuous Integration
+
+- Prevent pypi pushes for existing versions
+  ([`5e8908e`](https://github.com/viktor-haag/skjalf/commit/5e8908eda9ccdf14a08a4e250224d5222daeee2e))
+
+### Documentation
+
+- Add hal as maintainer
+  ([`431078b`](https://github.com/viktor-haag/skjalf/commit/431078bc002179142b106d048f31b65854611fa9))
+
+### Features
+
+- Nextcloud plugin for skjalf ([#7](https://github.com/viktor-haag/skjalf/pull/7),
+  [`54ef1e2`](https://github.com/viktor-haag/skjalf/commit/54ef1e2d0caceabc61417ac8826be4e93d697a55))
+
+
 ## v1.1.0 (2026-07-15)
 
 ### Bug Fixes
