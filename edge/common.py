@@ -144,19 +144,71 @@ def available_providers() -> list[str]:
     return ort.get_available_providers()
 
 
-def make_session(model_path: Path, provider: str, disable_fallback: bool = False, profile: bool = False):
+WEBGPU_POWER_PREFERENCES = ("high-performance", "low-power")
+WEBGPU_BACKENDS = ("D3D12", "D3D11", "Vulkan", "Metal", "OpenGL", "OpenGLES")
+
+
+def webgpu_config(power: str | None = None, backend: str | None = None) -> dict[str, str]:
+    """Session config entries that steer which GPU adapter the ORT WebGPU EP picks.
+
+    The WebGPU EP has no adapter index: Dawn picks the first adapter of the requested
+    backend that matches the power preference (``high-performance`` -> discrete GPU first,
+    ``low-power`` -> integrated GPU first). Defaults are high-performance and D3D12 on
+    Windows, Vulkan on Linux, and Metal on macOS.
+
+    Note: these must be *session config entries*; ORT's Python provider-options dict
+    ignores them silently. The WebGPU context is created once per process, so only the
+    first WebGPU session's settings take effect.
+    """
+    cfg = {}
+    if power:
+        cfg["ep.webgpuexecutionprovider.powerPreference"] = power
+    if backend:
+        cfg["ep.webgpuexecutionprovider.dawnBackendType"] = backend
+    return cfg
+
+
+def make_session(
+    model_path: Path,
+    provider: str,
+    disable_fallback: bool = False,
+    profile: bool = False,
+    config: dict[str, str] | None = None,
+):
     """Create an InferenceSession pinned to *provider* (+ CPU fallback unless disabled)."""
     import onnxruntime as ort
 
     so = ort.SessionOptions()
     so.log_severity_level = 3
+    for key, value in (config or {}).items():
+        so.add_session_config_entry(key, value)
     if disable_fallback and provider != CPU_EP:
         so.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
+        # This is a probe that is expected to fail when any node needs CPU; the caller
+        # reports the result, so keep ORT from logging it as an [E:onnxruntime] error.
+        so.log_severity_level = 4
     if profile:
         so.enable_profiling = True
         so.profile_file_prefix = os.path.join(tempfile.gettempdir(), "skjalf_edge_profile")
     providers = [provider] if provider == CPU_EP or disable_fallback else [provider, CPU_EP]
-    return ort.InferenceSession(str(model_path), sess_options=so, providers=providers)
+    cls = ort.InferenceSession if provider == CPU_EP else _strict_session_class(ort)
+    return cls(str(model_path), sess_options=so, providers=providers)
+
+
+def _strict_session_class(ort):
+    """InferenceSession that raises if the EP fails to initialise.
+
+    By default ORT's Python wrapper catches EP init errors (e.g. no usable WebGPU adapter
+    for the requested backend), prints them and silently retries on CPU only, so the
+    benchmark would time CPU while calling it WebGPU.
+    """
+
+    class StrictInferenceSession(ort.InferenceSession):
+        def _create_inference_session(self, *args, **kwargs):
+            self._enable_fallback = False
+            return super()._create_inference_session(*args, **kwargs)
+
+    return StrictInferenceSession
 
 
 def cpu_fallback_ops(model_path: Path, provider: str, feeds: dict[str, np.ndarray]) -> dict[str, int]:

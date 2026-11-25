@@ -7,6 +7,7 @@ on edge devices or in the browser (WebGPU), compared against plain PyTorch.
 |------|---------|
 | `export_onnx.py` | Export image and text encoder to ONNX, inspect ops/opset, verify against PyTorch on the CPU and WebGPU EPs, report WebGPU CPU-fallback ops |
 | `benchmark.py` | Latency/throughput benchmark: PyTorch CPU, PyTorch CUDA, ORT CPU, ORT WebGPU, plus an accuracy check of each backend against PyTorch |
+| `list_gpus.py` | List all GPUs (integrated and discrete): OS view, WebGPU adapters with type/backend, CUDA/ROCm devices, plus the benchmark flags that select each one |
 | `common.py` | Shared model wrappers, sample inputs, ORT session helpers, accuracy metrics |
 
 ## Embeddings
@@ -41,6 +42,7 @@ Use the existing `skjalf` conda environment and add the export tools:
 ```bash
 conda activate skjalf
 pip install onnx onnxscript
+pip install wgpu        # optional: lets list_gpus.py / benchmark.py --gpu enumerate WebGPU adapters
 ```
 
 The plain `onnxruntime` that chromadb pulls in only has the CPU EP. You can test
@@ -67,7 +69,44 @@ python export_onnx.py --opset 18 --exporter legacy
 python benchmark.py                      # batch sizes 1 and 8, 20 runs, 3 warm-up
 python benchmark.py --batch-size 1 4 16 --runs 50 --warmup 5
 python benchmark.py --backends ort-cpu ort-webgpu --encoders image --json results.json
+
+python list_gpus.py                      # all GPUs + how to select them
+python benchmark.py --gpu 1              # WebGPU adapter #1 from list_gpus.py
+python benchmark.py --webgpu-power low-power --webgpu-backend Vulkan
+python benchmark.py --backends torch-cuda --cuda-device 1
 ```
+
+### Selecting a GPU
+
+`list_gpus.py` prints three lists, and the benchmark selects from them:
+
+| list | benchmark flag | used by |
+|------|----------------|---------|
+| WebGPU adapters (via `wgpu`) | `--gpu N`, or `--webgpu-power` + `--webgpu-backend` | `ort-webgpu` |
+| CUDA/ROCm devices (via torch) | `--cuda-device N` | `torch-cuda` |
+| system GPUs (OS) | – (informational) | – |
+
+The ORT WebGPU EP (Dawn) has **no adapter index**. It takes the first adapter of the
+chosen backend (default: D3D12 on Windows, Vulkan on Linux, Metal on macOS), ordered by
+power preference:
+
+* `high-performance` (default): discrete GPU first
+* `low-power`: integrated GPU first
+
+`--gpu N` translates an adapter from the list into these two settings. Two GPUs of the
+same type on the same backend can therefore not both be targeted, and software/CPU
+adapters cannot be selected at all. `list_gpus.py` marks both cases as "not selectable".
+
+The adapter list comes from wgpu-native, not from the Dawn build inside ONNX Runtime.
+The "expected adapter" that benchmark.py prints is a best guess. If ORT's Dawn cannot
+use a backend, the run is reported as `skipped: … No supported adapters`. This happens,
+for example, with Vulkan on Windows ARM64 (Adreno). ORT's default silent fallback to CPU
+is disabled, so a GPU row is never secretly a CPU measurement.
+
+The options are passed as session config entries
+(`ep.webgpuexecutionprovider.powerPreference` / `.dawnBackendType`). The provider-options
+dict of the Python API ignores them. ORT creates the WebGPU context once per process,
+so run one benchmark per adapter.
 
 The models are written to `edge/models/`. `*.onnx` and `models/` are git-ignored.
 Image ≈ 240 MB, text ≈ 420 MB, both fp32 with weights embedded.

@@ -7,6 +7,7 @@ checks every backend's output against the PyTorch CPU reference
 
     python benchmark.py --batch-size 1 8 --runs 20
     python benchmark.py --backends ort-cpu ort-webgpu --encoders image
+    python benchmark.py --gpu 1 --cuda-device 0     # indices from list_gpus.py
 """
 
 from __future__ import annotations
@@ -37,7 +38,9 @@ from common import (
     load_torch,
     make_session,
     text_inputs,
+    webgpu_config,
 )
+from common import WEBGPU_BACKENDS, WEBGPU_POWER_PREFERENCES
 
 BACKENDS = ["torch-cpu", "torch-cuda", "ort-cpu", "ort-webgpu"]
 TEXT_KEYS = ("input_ids", "attention_mask", "token_type_ids")
@@ -75,16 +78,27 @@ def time_fn(fn: Callable[[], object], warmup: int, runs: int, sync: Callable[[],
     return times, out
 
 
-def make_runner(backend: str, encoder: str, feeds: dict[str, np.ndarray], model, models_dir: Path):
-    """Return (callable producing a numpy embedding batch, sync fn)."""
+def make_runner(
+    backend: str,
+    encoder: str,
+    feeds: dict[str, np.ndarray],
+    model,
+    models_dir: Path,
+    cuda_device: int = 0,
+    webgpu_cfg: dict[str, str] | None = None,
+):
+    """Return (callable producing a numpy embedding batch, sync fn, output->numpy fn)."""
     if backend.startswith("torch"):
-        device = "cuda" if backend == "torch-cuda" else "cpu"
-        if device == "cuda" and not torch.cuda.is_available():
-            raise Skip("CUDA not available")
+        device = f"cuda:{cuda_device}" if backend == "torch-cuda" else "cpu"
+        if backend == "torch-cuda":
+            if not torch.cuda.is_available():
+                raise Skip("CUDA not available")
+            if cuda_device >= torch.cuda.device_count():
+                raise Skip(f"cuda:{cuda_device} does not exist ({torch.cuda.device_count()} device(s))")
         mod = (ImageEncoder(model) if encoder == "image" else TextEncoder(model)).to(device).eval()
         keys = ("pixel_values",) if encoder == "image" else TEXT_KEYS
         tensors = [torch.from_numpy(feeds[k]).to(device) for k in keys]
-        sync = torch.cuda.synchronize if device == "cuda" else (lambda: None)
+        sync = (lambda: torch.cuda.synchronize(device)) if backend == "torch-cuda" else (lambda: None)
 
         def run():
             with torch.inference_mode():
@@ -102,12 +116,44 @@ def make_runner(backend: str, encoder: str, feeds: dict[str, np.ndarray], model,
     if not path.exists():
         raise Skip(f"{path.name} missing — run export_onnx.py first")
     try:
-        sess = make_session(path, provider)
+        sess = make_session(path, provider, config=webgpu_cfg if provider == WEBGPU_EP else None)
     except Exception as e:  # noqa: BLE001
-        raise Skip(f"session creation failed: {str(e).splitlines()[0][:120]}") from e
+        msg = str(e).strip().splitlines()[0]
+        msg = msg.split(" was false. ", 1)[-1]  # drop ORT's source location / assertion prefix
+        raise Skip(f"session creation failed: {msg[:150]}") from e
     if provider not in sess.get_providers():
         raise Skip(f"{provider} was not activated by ORT")
     return (lambda: sess.run(None, feeds)[0]), (lambda: None), (lambda out: out)
+
+
+def resolve_webgpu_selection(args) -> dict[str, str]:
+    """Turn --gpu / --webgpu-* into ORT session config entries and report the expected adapter."""
+    power, backend = args.webgpu_power, args.webgpu_backend
+    adapters = None
+    if args.gpu is not None or "ort-webgpu" in args.backends:
+        from list_gpus import webgpu_adapters
+
+        adapters = webgpu_adapters()
+    if args.gpu is not None:
+        if adapters is None:
+            sys.exit("--gpu needs `pip install wgpu` to enumerate adapters (or use --webgpu-power/--webgpu-backend)")
+        if not 0 <= args.gpu < len(adapters):
+            sys.exit(f"--gpu {args.gpu}: no such adapter (run list_gpus.py; {len(adapters)} found)")
+        chosen = adapters[args.gpu]
+        flags = chosen["ort_flags"]
+        if flags is None:
+            sys.exit(f"--gpu {args.gpu} ({chosen['name']}, {chosen['type']}, {chosen['backend']}) "
+                     "cannot be selected in the ORT WebGPU EP (see list_gpus.py)")
+        power, backend = power or flags["power"], backend or flags["backend"]
+    if "ort-webgpu" in args.backends:
+        from list_gpus import default_webgpu_backend, expected_adapter
+
+        desc = f"power={power or 'high-performance (default)'}, backend={backend or default_webgpu_backend() + ' (default)'}"
+        if adapters:
+            exp = expected_adapter(adapters, power, backend)
+            desc += " -> expected adapter: " + (f"#{exp['index']} {exp['name']}" if exp else "none matching")
+        print(f"ort-webgpu selection: {desc}")
+    return webgpu_config(power, backend)
 
 
 def fmt(v: float, nd: int = 1) -> str:
@@ -158,7 +204,15 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=0, help="torch intra-op threads (0 = default)")
     ap.add_argument("--local-files-only", action="store_true")
     ap.add_argument("--json", type=Path, help="also write raw results to this file")
+    gpu = ap.add_argument_group("GPU selection (see list_gpus.py)")
+    gpu.add_argument("--gpu", type=int, metavar="N",
+                     help="WebGPU adapter index from list_gpus.py (sets --webgpu-power/--webgpu-backend)")
+    gpu.add_argument("--webgpu-power", choices=WEBGPU_POWER_PREFERENCES,
+                     help="ORT WebGPU power preference: high-performance (discrete first) or low-power (integrated first)")
+    gpu.add_argument("--webgpu-backend", choices=WEBGPU_BACKENDS, help="Dawn backend for ORT WebGPU")
+    gpu.add_argument("--cuda-device", type=int, default=0, metavar="N", help="device index for torch-cuda")
     args = ap.parse_args()
+    webgpu_cfg = resolve_webgpu_selection(args)
 
     if args.threads:
         torch.set_num_threads(args.threads)
@@ -170,6 +224,8 @@ def main() -> int:
         print(f"onnxruntime {ort.__version__}, providers={ort.get_available_providers()}")
     except ImportError:
         print("onnxruntime not installed — ORT backends will be skipped")
+    if "torch-cuda" in args.backends and torch.cuda.is_available() and args.cuda_device < torch.cuda.device_count():
+        print(f"torch-cuda device: cuda:{args.cuda_device} ({torch.cuda.get_device_name(args.cuda_device)})")
 
     results: list[Result] = []
     for encoder in args.encoders:
@@ -184,7 +240,9 @@ def main() -> int:
                 res = Result(backend, encoder, bs)
                 print(f"[run] {encoder:5s} batch={bs:<3d} {backend:10s} ... ", end="", flush=True)
                 try:
-                    run, sync, to_np = make_runner(backend, encoder, feeds, model, args.models_dir)
+                    run, sync, to_np = make_runner(
+                        backend, encoder, feeds, model, args.models_dir, args.cuda_device, webgpu_cfg
+                    )
                     times, out = time_fn(run, args.warmup, args.runs, sync)
                     res.mean_ms = statistics.fmean(times)
                     res.median_ms = statistics.median(times)

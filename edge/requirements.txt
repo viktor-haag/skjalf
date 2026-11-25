@@ -14,3 +14,6 @@ onnxscript>=0.5
 # on `onnxruntime`; see README.md for how to test WebGPU without replacing it.
 # For CPU-only benchmarking the plain `onnxruntime` package is enough.
 onnxruntime-webgpu>=1.25
+
+# Optional: enumerate WebGPU adapters (list_gpus.py, benchmark.py --gpu)
+wgpu>=0.20
