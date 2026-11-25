@@ -1,0 +1,16 @@
+# Already part of the skjalf environment
+torch>=2.12.0
+transformers>=5.10.2
+pillow>=10.0
+numpy
+
+# ONNX export (dynamo exporter needs onnxscript)
+onnx>=1.17
+onnxscript>=0.5
+
+# ONNX Runtime with WebGPU + CPU execution providers.
+# NOTE: `onnxruntime-webgpu` and `onnxruntime` both install the `onnxruntime`
+# module and must not be installed side by side. chromadb (desktop app) depends
+# on `onnxruntime`; see README.md for how to test WebGPU without replacing it.
+# For CPU-only benchmarking the plain `onnxruntime` package is enough.
+onnxruntime-webgpu>=1.25
