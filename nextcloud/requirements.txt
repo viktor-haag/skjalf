@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+nc-py-api>=0.30,<0.31
+chromadb>=1.5.9,<2
+torch==2.12.0+cpu
+transformers>=5.10.2,<6
+accelerate==1.13.0
+pillow>=10,<13
