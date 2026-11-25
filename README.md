@@ -6,6 +6,8 @@ Skjalf lets you search your local photo collection using natural language instea
 
 Why is it called **Skjalf**? The name is inspired by Hlidskjalf, Odin's high seat in Norse mythology, which allowed him to see and observe the world from above. Similarly, Skjalf helps you gain a new perspective on your own image collection - making it easier to discover what you are looking for.
 
+Skjalf comes in two flavours: a **desktop app** for folders on your own computer, and a **Nextcloud app** (early preview) that brings the same search to the photos in your Nextcloud account.
+
 This project is still in an early stage, so bugs are to be expected. If you run into any issues, please open a ticket. It would be greatly appreciated!
 
 Watch Skjalf in action below!
@@ -20,6 +22,7 @@ https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 - **Drag & Drop**: Easily register folders or move files via drag and drop.
 - **Multi-Select & File Operations**: Select multiple files and perform batch operations (copy, move, delete).
 - **GPU Acceleration**: Toggle GPU processing for faster embedding generation.
+- **Nextcloud App** (preview): Search the photos in your own Nextcloud folders from inside Nextcloud. Indexing is started manually per folder and the number of results is configurable.
 
 ## Technology Stack
 
@@ -28,11 +31,11 @@ https://github.com/user-attachments/assets/db17e439-2173-4ff1-84cd-6da0fde0446e
 - **Embedding Model**: Hugging Face Transformers (`kakaobrain/align-base`)
 - **Vector Storage**: ChromaDB
 - **Filesystem Monitoring**: `watchdog`
+- **Nextcloud App**: FastAPI backend behind Nextcloud AppAPI, Vue 2 frontend, SQLite for folder and job state
 
 ## Installation & Usage
 
-For the Nextcloud app, see [setup and command-line updates](nextcloud/README.md#updates-einer-bestehenden-compose-installation).
-
+The steps below install the desktop app. For the Nextcloud app, see [Nextcloud app](#nextcloud-app).
 
 ### Prerequisites
 
@@ -71,6 +74,12 @@ skjalf
 * Use the right mouse button to access file operations such as moving, copying, or deleting items. Multiple files can be selected using Ctrl-click, Shift-click, or box selection.
 * To search, simply enter a query in the search bar. Searches are always limited to the currently selected root folder.
 
+## Nextcloud App
+
+The `nextcloud/` folder contains Skjalf as a Nextcloud External App (Nextcloud 34, AppAPI). It runs as its own Docker container, reads photos only through the signed-in user's Nextcloud access, and keeps its index in the app's own storage. Your original files stay in Nextcloud.
+
+The full guide is in German: [nextcloud/README.md](nextcloud/README.md). It covers a local test setup with Docker Compose, installing into an existing Nextcloud, [updating](nextcloud/README.md#updates-einer-bestehenden-compose-installation) and troubleshooting.
+
 ## Roadmap
 
 ### Milestone 0: Initial Prototype <-- we are here
@@ -99,6 +108,7 @@ skjalf
 - [ ] Retrieval by example image
 
 ### Milestone 3: Web Platform
+- [x] Nextcloud app as a first browser-based version (preview)
 - [ ] Browser-based interface for remote access
 - [ ] Server-client architecture
 - [ ] All current features available in the web version

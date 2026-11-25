@@ -1,6 +1,6 @@
 # Abnahme auf Nextcloud 34
 
-Die folgenden Prüfungen sind für eine spätere Freigabe vorgesehen. Sie wurden bei der Erstellung nicht ausgeführt. Auf Wunsch des Nutzers wurden keine Abhängigkeiten installiert und keine Tests, Builds oder Container gestartet.
+Manuelle Prüfungen vor einer Freigabe auf einer separaten Nextcloud-34-Testinstallation. Die automatischen Unit-Tests decken diese Punkte nur teilweise ab; siehe [README.md](README.md#prüfung).
 
 ## Einrichtung und erster Lauf
 

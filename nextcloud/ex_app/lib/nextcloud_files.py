@@ -5,11 +5,21 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Any
 
-from .catalog import normalize_user_path
-
 IMAGE_SUFFIXES = frozenset(
     {".avif", ".bmp", ".gif", ".heic", ".heif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 )
+
+
+def normalize_user_path(path: str) -> str:
+    """Normalize a Nextcloud user-relative path without accepting traversal."""
+    if "\\" in path or "\x00" in path:
+        raise ValueError("Ungültiger Nextcloud-Pfad.")
+    raw = path.strip("/")
+    parts = raw.split("/") if raw else []
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("Ungültiger Nextcloud-Pfad.")
+    normalized = PurePosixPath(*parts).as_posix() if parts else ""
+    return "" if normalized == "." else normalized
 
 
 class FileUnavailable(Exception):

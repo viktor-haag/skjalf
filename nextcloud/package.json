@@ -9,8 +9,7 @@
     "@nextcloud/auth": "^2.6.0",
     "@nextcloud/axios": "^2.5.0",
     "@nextcloud/router": "^3.0.0",
-    "vue": "^2.7.16",
-    "vue-router": "^3.6.5"
+    "vue": "^2.7.16"
   },
   "devDependencies": {
     "css-loader": "^7.1.2",
